@@ -207,8 +207,8 @@ class RobotGazeboEnv(gym.Env):
         return True
 
     def _init_env_variables(self):
-        print("Var = 0")
-        self.step_circle = 0
+        # print("Var = 0")
+        # self.step_circle = 0
         self.last_pose = self.get_endEffector_pose().pose
         self.current_pose = self.get_endEffector_pose().pose
         return True
@@ -231,7 +231,7 @@ class RobotGazeboEnv(gym.Env):
         
         # Add and delete OBJECT 
         self.remove_object()
-        rospy.sleep(5.0)
+        rospy.sleep(0.01)
         self.spawn_object()
         return True
 
@@ -443,8 +443,8 @@ class RobotGazeboEnv(gym.Env):
         #***************************************************************************************************
 
         # Check if point is in the workspace:
-        bool_check_workspace = self.check_workspace(pose_goal)
-        if bool_check_workspace == True:
+        # bool_check_workspace = self.check_workspace(pose_goal)
+        if self.check_workspace(pose_goal) == True:
             # self.pub_cartesianPose.publish(pose_goal)
             result = self.set_endEffector_pose(pose_goal)
             # Shortcut the result from moveit 
@@ -512,12 +512,14 @@ class RobotGazeboEnv(gym.Env):
         return dist
 
     # TODO: ADD a random position of the object
+    #       add the location of the object : https://answers.ros.org/question/237862/rosnode-kill/
+    #           and to run as a subprocesses: https://answers.ros.org/question/41848/start-a-node-from-python-code-rospy-equivalence-rosrun-rosgui-qt/
     def spawn_object(self):
         '''
         Spawn an object at a defined position
         https://github.com/ipa320/srs_public/blob/master/srs_user_tests/ros/scripts/spawn_object.py
         '''
-        print("Spawn object")
+        # print("Spawn object")
         
 
 
@@ -554,7 +556,7 @@ class RobotGazeboEnv(gym.Env):
         Remove an object
         https://github.com/ipa320/srs_public/blob/master/srs_user_tests/ros/scripts/spawn_object.py
         '''
-        print("Remove object")
+        # print("Remove object")
         name = "object_to_push"
         rospy.wait_for_service("/gazebo/delete_model")
         srv_delete_model = rospy.ServiceProxy('/gazebo/delete_model', DeleteModel)
