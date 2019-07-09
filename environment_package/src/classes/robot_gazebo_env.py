@@ -1,4 +1,5 @@
 #!/usr/bin/env python2
+
 import rospy
 import gym
 from gym.utils import seeding
@@ -14,6 +15,7 @@ import rospy
 import rospkg
 import git
 import sys
+import time
 
 #moveit
 import moveit_commander
@@ -57,6 +59,10 @@ class RobotGazeboEnv(gym.Env):
         self.reset_world_proxy = rospy.ServiceProxy('/gazebo/reset_world', Empty)
         self.reset_world_or_sim = "NO_RESET" # SIMULATION WORLD NO_RESET
 
+        # Init position:
+        self.bool_init_joint_or_pose = True
+        self.constant_z = 0.10
+
         # Creation of moveit variables
         # self.moveit_object = MoveIiwa()
         self.pub_cartesianPose = rospy.Publisher('/iiwa/moveToCartesianPose', Pose, queue_size=1)
@@ -95,7 +101,7 @@ class RobotGazeboEnv(gym.Env):
         # TARGET
         target_x = 0.5#0.0#0.5
         target_y = -0.5#0.5
-        target_z = 0.25#0.5
+        target_z = 0.10#0.5
         self.target_position = []
         self.target_position.append(target_x)
         self.target_position.append(target_y)
@@ -148,10 +154,10 @@ class RobotGazeboEnv(gym.Env):
         Returns: 
             observation (object): the initial observation.
         """
-        self._reset_sim()
+        
         self._init_pose()
         self._init_env_variables()
-        
+        self._reset_sim()
         
         return self._get_obs()
 
@@ -200,17 +206,20 @@ class RobotGazeboEnv(gym.Env):
     #*****************************************************************************
 
     def _init_pose(self):
-        # init_joint = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        init_joint = [0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 0.0]
-
-        self.set_joints_execute(init_joint)
+        if(self.bool_init_joint_or_pose == True):
+            init_joint = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            # init_joint = [0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 0.0]
+            self.set_joints_execute(init_joint)
+        else:
+            init_action = [0.5, 0.0, self.constant_z, 3.1457, 0.0, 0.0]
+            self.set_endEffector_pose(init_action)
         return True
 
     def _init_env_variables(self):
         # print("Var = 0")
         # self.step_circle = 0
         self.last_pose = self.get_endEffector_pose().pose
-        self.current_pose = self.get_endEffector_pose().pose
+        self.current_pose = self.last_pose
         return True
 
     def _reset_sim(self):
@@ -231,8 +240,11 @@ class RobotGazeboEnv(gym.Env):
         
         # Add and delete OBJECT 
         self.remove_object()
-        rospy.sleep(0.01)
+        rospy.sleep(0.1)
         self.spawn_object()
+
+        init_action = [0.6, 0.1, self.constant_z, 3.1457, 0.0, 0.0]
+        self.set_endEffector_pose(init_action)
         return True
 
     def _set_action(self, action):
@@ -366,7 +378,7 @@ class RobotGazeboEnv(gym.Env):
         z0 = 0.34
         offset_ee = 0.13
         # offset_z = 0.25
-        offset_z = 0.05 # for testing the hands
+        offset_z = 0.01 # for testing the hands
         # print("Before check point")
         # print("Calculation: ", ((x*x + y*y + (z-z0)*(z-z0)) < (0.8+offset_ee)*(0.8+offset_ee)))
         if (((x*x + y*y + (z-z0)*(z-z0)) < (0.8+offset_ee)*(0.8+offset_ee)) 
@@ -382,9 +394,10 @@ class RobotGazeboEnv(gym.Env):
         return result
 
     def get_endEffector_pose(self):
-
+        # start_time = time.time()
         endEffector_pose = self.group.get_current_pose()
-
+        # stop_time = time.time()
+        # print("--- %s seconds ---" % (stop_time - start_time))
         return endEffector_pose
 
     def set_endEffector_actionToPose(self, action):
@@ -393,7 +406,7 @@ class RobotGazeboEnv(gym.Env):
         (x, y, z, R, P, Y)    
         '''
         # defining a height that the robot should stay!
-        constant_z = 0.35
+        # constant_z = 0.10
 
         # Current pose of the hand effector
         current_pose = geometry_msgs.msg.Pose()
@@ -425,7 +438,7 @@ class RobotGazeboEnv(gym.Env):
         pose_goal = geometry_msgs.msg.Pose()
         pose_goal.position.x = current_pose.position.x + action[0]
         pose_goal.position.y = current_pose.position.y + action[1]
-        pose_goal.position.z = constant_z#current_pose.position.z + action[2]
+        pose_goal.position.z = self.constant_z #current_pose.position.z + action[2]
         # q_interm = quaternion_multiply(q_rot, q_interm)
         pose_goal.orientation.x = q_interm[0]
         pose_goal.orientation.y = q_interm[1]
@@ -446,7 +459,79 @@ class RobotGazeboEnv(gym.Env):
         # bool_check_workspace = self.check_workspace(pose_goal)
         if self.check_workspace(pose_goal) == True:
             # self.pub_cartesianPose.publish(pose_goal)
-            result = self.set_endEffector_pose(pose_goal)
+            result = self.execute_endEffector_pose(pose_goal)
+            # Shortcut the result from moveit 
+
+            # current_pose = self.get_endEffector_pose().pose
+            # print("Error is: ", self.distance_between_vectors([current_pose.position.x, 
+            #   current_pose.position.y, current_pose.position.z], [pose_goal.position.x, 
+            #   pose_goal.position.y, pose_goal.position.z]))
+            result = True
+        else:
+            result = False
+        
+        return result
+        
+    def set_endEffector_pose(self, action):
+        '''
+        Vector action is the delta position (m) and angle (rad)
+        (x, y, z, R, P, Y)    
+        '''
+        # defining a height that the robot should stay!
+        # constant_z = 0.10
+
+        # Current pose of the hand effector
+        current_pose = geometry_msgs.msg.Pose()
+        # current_pose = self.get_endEffector_pose().pose
+        # print("***************************************************")
+        # print("current orientation")
+        # print(current_pose.orientation)
+
+        # Normal way
+        # q_interm = quaternion_from_euler(action[3], action[4], action[5])
+        # q_interm[0] = current_pose.orientation.x
+        # q_interm[1] = current_pose.orientation.y
+        # q_interm[2] = current_pose.orientation.z
+        # q_interm[3] = current_pose.orientation.w
+        # Fix way
+        q_interm = quaternion_from_euler(action[3], action[4], action[5])
+
+        # print("***************************************************")
+        # euler to quaternion 
+        # R, P, Y = action[3], action[4], action[5]
+        # q_rot = quaternion_from_euler(action[3], action[4], action[5])
+        # print("***************************************************")
+        # print("desired rotation")
+        # print(q_rot)
+        # print("***************************************************")
+  
+
+        # create pose msg
+        pose_goal = geometry_msgs.msg.Pose()
+        pose_goal.position.x = action[0]
+        pose_goal.position.y = action[1]
+        pose_goal.position.z = action[2]#current_pose.position.z + action[2]
+        # q_interm = quaternion_multiply(q_rot, q_interm)
+        pose_goal.orientation.x = q_interm[0]
+        pose_goal.orientation.y = q_interm[1]
+        pose_goal.orientation.z = q_interm[2]
+        pose_goal.orientation.w = q_interm[3]
+        # pose_goal.orientation =  q_mult(q_rot, current_pose.orientation)
+        
+        #***************************************************************************************************
+        # WARNING SHORTCUT!!!
+        # pose_goal.orientation.w = 1.0
+        # pose_goal.position.x = 0.7*math.cos(self.step_circle)
+        # pose_goal.position.y = 0.7*math.sin(self.step_circle)
+        # pose_goal.position.z = 0.7#current_pose.position.z + action[2]
+        # self.step_circle +=0.078539816339#0.1
+        #***************************************************************************************************
+
+        # Check if point is in the workspace:
+        # bool_check_workspace = self.check_workspace(pose_goal)
+        if self.check_workspace(pose_goal) == True:
+            # self.pub_cartesianPose.publish(pose_goal)
+            result = self.execute_endEffector_pose(pose_goal)
             # Shortcut the result from moveit 
             result = True
         else:
@@ -456,7 +541,7 @@ class RobotGazeboEnv(gym.Env):
 
 
     # Plan and Execute the trajectory planed for a given cartesian pose
-    def set_endEffector_pose(self, pose):
+    def execute_endEffector_pose(self, pose):
         '''
         Send to the "controller" the positions (trajectory) where it want to go
         '''
@@ -532,7 +617,7 @@ class RobotGazeboEnv(gym.Env):
         object_pose = Pose()
         object_pose.position.x = float(0.5)
         object_pose.position.y = float(0.0)
-        object_pose.position.z = float(0.25)
+        object_pose.position.z = float(0.5)
         object_pose.orientation.x = quaternion[0]
         object_pose.orientation.y = quaternion[1]
         object_pose.orientation.z = quaternion[2]

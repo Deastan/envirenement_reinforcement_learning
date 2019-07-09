@@ -73,7 +73,7 @@ def discrete_action(action):
     5 = - step_size * z
     '''
     a = [0, 0, 0, 0, 0, 0]
-    step_size = 0.1
+    step_size = 0.01
     if action == 0:
         a[action] = step_size
     elif action == 1:
@@ -88,21 +88,20 @@ def discrete_action(action):
         a[2] = -step_size
     return a
 
-def main():
-    rospy.init_node('training_node', anonymous=True, log_level=rospy.WARN)
-    print("Start")
+def qlearning(env):
     # Parameters:
     MAX_STEPS = 50
     MAX_EPOCHS = 3
-    env = init_env()
-    print(env.reset())
+    
     # while True:
     for epoch in range(0, MAX_EPOCHS):
         
         last_obs = env.reset()
         for step in range(0, MAX_STEPS):
-            discrete_act = env.action_space.sample()
+            # discrete_act = env.action_space.sample()
+            discrete_act = 1
             action = discrete_action(discrete_act)
+            # action = [0, 0.0, 0, 0.01, 0, 0]
             obs, reward, done, info = env.step(action)
             print("*********************************************")
             print("Observation: ", obs)
@@ -116,6 +115,22 @@ def main():
             print("Step: ", step)
             print("*********************************************")
 
+def catch_object(env):
+    env.reset()
+    env.set_endEffector_pose([0.5, 0.0, 0.1, 3.1457, 0.0, 0.0])
+    rospy.sleep(15)
+    env.set_endEffector_pose([0.5, 0.0, 0.3, 3.1457, 0.0, 0.0])
+    env.set_endEffector_pose([0.0, 0.5, 0.30, 3.1457, 0.0, 0.0])
+
+def main():
+    rospy.init_node('training_node', anonymous=True, log_level=rospy.WARN)
+    print("Start")
+    # env = init_env()
+    # env.reset()
+    env = init_env()
+    # env.reset()
+    qlearning(env)
+    # catch_object(env)
 
     print("end")
 
