@@ -41,6 +41,10 @@ from gazebo_msgs.srv import DeleteModel
 from gazebo_msgs.srv import DeleteModelRequest
 from std_msgs.msg import Empty as EmptyMsg
 
+from controller_manager_msgs.srv import SwitchController
+# from controller_manager_msgs.srv import SwitchControllerRequest
+from controller_manager_msgs.srv import LoadController
+
 # Maths
 import numpy
 from tf.transformations import *
@@ -51,16 +55,18 @@ from math import pi
 class RobotGazeboEnv(gym.Env):
 
     def __init__(self):
-        print("create object!")
+        # print("create object!")
         self.status = "environment created"
         
         #Gazebo:
         self.reset_simulation_proxy = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
         self.reset_world_proxy = rospy.ServiceProxy('/gazebo/reset_world', Empty)
-        self.reset_world_or_sim = "NO_RESET" # SIMULATION WORLD NO_RESET
+        self.reset_world_or_sim = "WORLD" # SIMULATION WORLD NO_RESET
+        self.unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
+        self.pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
 
         # Init position:
-        self.bool_init_joint_or_pose = True
+        self.bool_init_joint_or_pose = False
         self.constant_z = 0.10
 
         # Creation of moveit variables
@@ -73,7 +79,9 @@ class RobotGazeboEnv(gym.Env):
         
         self.group_name = "manipulator"
         self.group = moveit_commander.MoveGroupCommander(self.group_name)
-        self.group.set_planner_id("RRTkConfigDefault")
+        # self.group.set_planner_id("RRTkConfigDefault")
+        self.group.set_planner_id("RRTConnectkConfigDefault") # Seem to be collissions aviodance
+        
         # self.step_circle = 0
 
         # For GYM
@@ -155,9 +163,19 @@ class RobotGazeboEnv(gym.Env):
             observation (object): the initial observation.
         """
         
-        self._init_pose()
-        self._init_env_variables()
+        # self._init_env_variables()
+        self.load_stop_controller()
+        self.pause()
         self._reset_sim()
+        self.unpause()
+        self.load_start_controller()
+
+        # self._init_pose()
+        init_action = [0.5, 0.1, self.constant_z, 3.1457, 0.0, 0.0]
+        self.set_endEffector_pose(init_action)
+        self._init_env_variables()
+                
+
         
         return self._get_obs()
 
@@ -211,7 +229,7 @@ class RobotGazeboEnv(gym.Env):
             # init_joint = [0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 0.0]
             self.set_joints_execute(init_joint)
         else:
-            init_action = [0.5, 0.0, self.constant_z, 3.1457, 0.0, 0.0]
+            init_action = [0.5, 0.1, self.constant_z, 3.1457, 0.0, 0.0]
             self.set_endEffector_pose(init_action)
         return True
 
@@ -239,13 +257,51 @@ class RobotGazeboEnv(gym.Env):
             print("ERROR: CANNOT RESET GAZEBO!")
         
         # Add and delete OBJECT 
-        self.remove_object()
-        rospy.sleep(0.1)
-        self.spawn_object()
+        # self.remove_object()
+        # rospy.sleep(0.1)
+        # self.spawn_object()
 
-        init_action = [0.6, 0.1, self.constant_z, 3.1457, 0.0, 0.0]
-        self.set_endEffector_pose(init_action)
-        return True
+        # Robot REMOVE AND SPAWN ********************************
+        # self.load_stop_controller()
+        # self.remove_robot()
+        # rospy.sleep(0.05)
+        # self.spawn_robot()
+        # rospy.sleep(10.05)
+        # rospy.sleep(0.05)
+
+        # CONTROLLER ***********************************
+        # self.load_start_controller()
+        # rospy.sleep(2.05)
+
+
+        # ROSLAUNCH ***********************************************
+        # launch_file_name="spawn_tf.launch"
+        # pkg_string = "/home/roboticlab14/catkin_ws/src/reflex-ros-pkg/reflex_control/"
+        # # launch_file_name="iiwa_gazebo_tool_debug.launch"
+        # # pkg_string = "/home/roboticlab14/catkin_ws/src/iiwa_stack/iiwa_gazebo/"
+        # # /home/roboticlab14/catkin_ws/src/iiwa_stack/iiwa_gazebo/launch/iiwa_gazebo_tool_debug.launch
+
+        # # Prepare the path
+        # pkg_path = os.path.normpath(pkg_string)
+
+        # uuid = roslaunch.rlutil.get_or_generate_uuid(None, False) #OK
+        # roslaunch.configure_logging(uuid)
+
+        # launch_dir = os.path.join(pkg_path, "launch") #ok
+        # path_launch_file_name = os.path.join(launch_dir, launch_file_name)
+        # # Launch the roslaunch
+        # launch = roslaunch.parent.ROSLaunchParent(uuid, [path_launch_file_name]) #ok
+        # launch.start()
+        # rospy.sleep(5.0)
+
+        # self.set_endEffector_pose([0.4, 0.1, 0.1, 3.1457, 0.0, 0.0])
+        # rospy.sleep(150.05)
+
+        # rospy.sleep(10.0)
+
+        # init_action = [0.6, 0.2, self.constant_z, 3.1457, 0.0, 0.0]
+        # self.set_endEffector_pose(init_action)
+        # return True
 
     def _set_action(self, action):
         """
@@ -313,7 +369,7 @@ class RobotGazeboEnv(gym.Env):
         # create the distance btw the two last vector
         distance_before_move = self.distance_between_vectors(last_position, self.target_position)
         distance_after_move = self.distance_between_vectors(current_position, self.target_position)
-
+        
         # Give the reward
         if self.out_workspace:
             total_reward -= 20
@@ -321,7 +377,7 @@ class RobotGazeboEnv(gym.Env):
             if done:
                 total_reward += 100
             else:
-                if(distance_after_move - distance_before_move > 0):
+                if(distance_after_move - distance_before_move < 0): # before change... >
                     # print("right direction")
                     total_reward += 2.0
                 else:
@@ -363,7 +419,11 @@ class RobotGazeboEnv(gym.Env):
         Output: 
                 True if we can reach the position, False otherwise.
         '''
+        # Time
+        # time_start_action = time.time()
+        # print("[ INFO] Time for the action ", j, ": ", time.time()-time_start_action)
         # print("Check workplace")
+        time_start_check_workspace = time.time()
         result = False
         x = pose.position.x
         y = pose.position.y
@@ -390,14 +450,15 @@ class RobotGazeboEnv(gym.Env):
             print("Check_workspace: Cannot go at this pose")
             # self.reset()
             self.out_workspace = True
-
+        print("[ INFO] Time for the check_workspace: ", time.time()-time_start_check_workspace)
         return result
 
     def get_endEffector_pose(self):
-        # start_time = time.time()
+        start_time = time.time()
         endEffector_pose = self.group.get_current_pose()
         # stop_time = time.time()
         # print("--- %s seconds ---" % (stop_time - start_time))
+        print("[ INFO] Time for the get_endEffector_pose: ", time.time()-start_time)
         return endEffector_pose
 
     def set_endEffector_actionToPose(self, action):
@@ -405,6 +466,7 @@ class RobotGazeboEnv(gym.Env):
         Vector action is the delta position (m) and angle (rad)
         (x, y, z, R, P, Y)    
         '''
+        time_start_set_endEffector_actionToPose = time.time()
         # defining a height that the robot should stay!
         # constant_z = 0.10
 
@@ -469,7 +531,7 @@ class RobotGazeboEnv(gym.Env):
             result = True
         else:
             result = False
-        
+        print("[ INFO] Time for the set_endEffector_actionToPose: ", time.time()-time_start_set_endEffector_actionToPose)
         return result
         
     def set_endEffector_pose(self, action):
@@ -477,34 +539,8 @@ class RobotGazeboEnv(gym.Env):
         Vector action is the delta position (m) and angle (rad)
         (x, y, z, R, P, Y)    
         '''
-        # defining a height that the robot should stay!
-        # constant_z = 0.10
-
-        # Current pose of the hand effector
-        current_pose = geometry_msgs.msg.Pose()
-        # current_pose = self.get_endEffector_pose().pose
-        # print("***************************************************")
-        # print("current orientation")
-        # print(current_pose.orientation)
-
-        # Normal way
-        # q_interm = quaternion_from_euler(action[3], action[4], action[5])
-        # q_interm[0] = current_pose.orientation.x
-        # q_interm[1] = current_pose.orientation.y
-        # q_interm[2] = current_pose.orientation.z
-        # q_interm[3] = current_pose.orientation.w
-        # Fix way
+        time_start_set_endEffector_pose = time.time()
         q_interm = quaternion_from_euler(action[3], action[4], action[5])
-
-        # print("***************************************************")
-        # euler to quaternion 
-        # R, P, Y = action[3], action[4], action[5]
-        # q_rot = quaternion_from_euler(action[3], action[4], action[5])
-        # print("***************************************************")
-        # print("desired rotation")
-        # print(q_rot)
-        # print("***************************************************")
-  
 
         # create pose msg
         pose_goal = geometry_msgs.msg.Pose()
@@ -516,17 +552,7 @@ class RobotGazeboEnv(gym.Env):
         pose_goal.orientation.y = q_interm[1]
         pose_goal.orientation.z = q_interm[2]
         pose_goal.orientation.w = q_interm[3]
-        # pose_goal.orientation =  q_mult(q_rot, current_pose.orientation)
-        
-        #***************************************************************************************************
-        # WARNING SHORTCUT!!!
-        # pose_goal.orientation.w = 1.0
-        # pose_goal.position.x = 0.7*math.cos(self.step_circle)
-        # pose_goal.position.y = 0.7*math.sin(self.step_circle)
-        # pose_goal.position.z = 0.7#current_pose.position.z + action[2]
-        # self.step_circle +=0.078539816339#0.1
-        #***************************************************************************************************
-
+    
         # Check if point is in the workspace:
         # bool_check_workspace = self.check_workspace(pose_goal)
         if self.check_workspace(pose_goal) == True:
@@ -536,7 +562,7 @@ class RobotGazeboEnv(gym.Env):
             result = True
         else:
             result = False
-        
+        print("[ INFO] Time for the time_start_set_endEffector_pose: ", time.time()-time_start_set_endEffector_pose)
         return result
 
 
@@ -545,18 +571,26 @@ class RobotGazeboEnv(gym.Env):
         '''
         Send to the "controller" the positions (trajectory) where it want to go
         '''
+        time_start_execute_endEffector_pose = time.time()
         result = False
         # self.group.shift_pose_target(5, action)
         self.group.set_pose_target(pose)
+        time_start_execute_endEffector_pose_plan = time.time()
         result = self.group.go(wait=True)
+        time_start_execute_endEffector_pose_go = time.time()
 
         self.group.stop()
+        time_start_execute_endEffector_pose_stop = time.time()
         # It is always good to clear your targets after planning with poses.
         # Note: there is no equivalent function for clear_joint_value_targets()
         self.group.clear_pose_targets()
+        time_start_execute_endEffector_pose_clear = time.time()
 
-    
-
+        print("[ INFO] Time for plan: ", time_start_execute_endEffector_pose_plan-time_start_execute_endEffector_pose)
+        print("[ INFO] Time for go: ", time_start_execute_endEffector_pose_go-time_start_execute_endEffector_pose_plan)
+        print("[ INFO] Time for: Stop: ", time_start_execute_endEffector_pose_stop-time_start_execute_endEffector_pose_go)
+        print("[ INFO] Time for: Clear: ", time_start_execute_endEffector_pose_clear-time_start_execute_endEffector_pose_stop)
+        print("[ INFO] Time for the time_start_execute_endEffector_pose: ", time.time()-time_start_execute_endEffector_pose)
         return result
 
     def set_joints_execute(self, joints_angle):
@@ -564,14 +598,7 @@ class RobotGazeboEnv(gym.Env):
         Execute the trajectory to go to the desired joints angle
         
         '''
-        
-        # We can get the joint values from the group and adjust some of the values:
-        # print(self.group.get_current_joint_values())
-        # joint_goal = self.group.get_current_joint_values()
-        # for i in range(0,6):
-        #     joint_goal[i] = joints_angle[i]
-
-
+        time_start_set_joints_execute = time.time()
         # self.group.set_joint_value_target(joint_goal)
         self.group.set_joint_value_target(joints_angle)
         # The go command can be called with joint values, poses, or without any
@@ -586,14 +613,17 @@ class RobotGazeboEnv(gym.Env):
         self.group.stop()
         # self.group.clear_pose_targets()
         # self.group.forget_joint_values()
-
+        print("[ INFO] Time for the time_start_set_joints_execute: ", time.time()-time_start_set_joints_execute)
         return result
 
     # Calculates the distance btw two position vectors
     def distance_between_vectors(self, v1, v2):
         """
         """
+        time_start_distance_between_vectors = time.time()
+        # self.group.set_joint_value_target(joint_goal)
         dist = np.linalg.norm(np.array(v1) - np.array(v2))
+        print("[ INFO] Time for the time_start_distance_between_vectors: ", time.time()-time_start_distance_between_vectors)
         return dist
 
     # TODO: ADD a random position of the object
@@ -652,3 +682,255 @@ class RobotGazeboEnv(gym.Env):
 			res = srv_delete_model(name)
         except rospy.ServiceException, e:
             print("ERROR: CANNOT REMOVE OBJECT: ", name)
+
+    
+    def spawn_robot(self):
+        '''
+        Spawn an object at a defined position
+        https://github.com/ipa320/srs_public/blob/master/srs_user_tests/ros/scripts/spawn_object.py
+        '''
+        
+        # Create position of the object
+        name = "iiwa"
+        # convert rpy to quaternion for Pose message
+		# orientation = rospy.get_param("/objects/%s/orientation" % name)
+        orientation = [0.0, 0.0, 0.0]
+        quaternion = tft.quaternion_from_euler(orientation[0], orientation[1], orientation[2])
+        object_pose = Pose()
+        object_pose.position.x = float(0.0)
+        object_pose.position.y = float(0.0)
+        object_pose.position.z = float(0.0)
+        object_pose.orientation.x = quaternion[0]
+        object_pose.orientation.y = quaternion[1]
+        object_pose.orientation.z = quaternion[2]
+        object_pose.orientation.w = quaternion[3]
+        # Create object
+        file_localition = roslib.packages.get_pkg_dir('reflex_description') + '/urdf/reflex_takktile_2.xacro'
+        p = os.popen("rosrun xacro xacro.py " + file_localition)
+        xml_string = p.read()
+        p.close()
+        srv_spawn_model = rospy.ServiceProxy('/gazebo/spawn_urdf_model', SpawnModel)
+
+        # rospy.wait_for_service("/gazebo/spawn_urdf_model")
+        # srv_spawn_model = rospy.ServiceProxy('/gazebo/spawn_urdf_model', SpawnModel)
+        # file_xml = open(file_localition)
+        # xml_string=file_xml.read()
+        # spawn new model
+        req = SpawnModelRequest()
+        req.model_name = name # model name from command line input
+        req.model_xml = xml_string
+        req.initial_pose = object_pose
+        
+        res = srv_spawn_model(req)
+
+            # model_type == "urdf.xacro":
+			# p = os.popen("rosrun xacro xacro.py " + file_localition)
+			# xml_string = p.read()
+			# p.close()
+            # srv_spawn_model = rospy.ServiceProxy('/gazebo/spawn_urdf_model', SpawnModel)
+    def remove_robot(self):
+        '''
+        Remove an object
+        https://github.com/ipa320/srs_public/blob/master/srs_user_tests/ros/scripts/spawn_object.py
+        '''
+        # print("Remove object")
+        name = "iiwa"
+        rospy.wait_for_service("/gazebo/delete_model")
+        srv_delete_model = rospy.ServiceProxy('/gazebo/delete_model', DeleteModel)
+        req = DeleteModelRequest()
+        req.model_name = name
+        # res = srv_delete_model(name)
+        try:
+			res = srv_delete_model(name)
+        except rospy.ServiceException, e:
+            print("ERROR: CANNOT REMOVE Robot: ", name)
+
+    def load_start_controller(self):
+        '''
+        Call the service to spawn controller
+
+        EX:
+            # IIwa
+            rosservice call /iiwa/controller_manager/load_controller "name: 'PositionJointInterface_trajectory_controller'"
+            rosservice call /iiwa/controller_manager/switch_controller "{start_controllers: ['PositionJointInterface_trajectory_controller'], stop_controllers: [], strictness: 1}"
+
+            Reflex:
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'joint_state_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'preshape_1_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'preshape_2_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'proximal_joint_1_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'proximal_joint_2_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'proximal_joint_3_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'distal_joint_1_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'distal_joint_2_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'distal_joint_3_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: ['joint_state_controller', preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], stop_controllers: [], strictness: 2}"
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: [], stop_controllers: ['joint_state_controller', preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], strictness: 2}"
+            
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: [preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], stop_controllers: [], strictness: 2}"
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: [], stop_controllers: [preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], strictness: 9}"
+        
+        '''
+        # from control_msgs.srv import SwitchController
+        # from control_msgs.srv import LoadController
+        # service service
+        
+        # IIWA
+        rospy.wait_for_service("/iiwa/controller_manager/load_controller")
+        srv_load_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        rospy.wait_for_service("/iiwa/controller_manager/switch_controller")
+        srv_switch_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/switch_controller', SwitchController)
+        # srv_switch_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/switch_controller', SwitchControllerRequest)
+        # service message
+        req_iiwa_load = "name: 'PositionJointInterface_trajectory_controller'"
+        # req_switch_model_iiwa = SwitchControllerRequest()
+        # req_switch_model_iiwa.start_controllers = "['PositionJointInterface_trajectory_controller']"
+        # req_switch_model_iiwa.stop_controllers = "[]"
+        # req_switch_model_iiwa.strictness = 1
+        # req_switch_model_iiwa.BEST_EFFORT = 1# int32 BEST_EFFORT=1
+        # req_switch_model_iiwa.STRICT = 2# int32 STRICT=2
+        # req_switch_model_iiwa = "{start_controllers: ['PositionJointInterface_trajectory_controller'], stop_controllers: [], strictness: 1}"
+        # service call
+        # srv_load_model_iiwa(req_iiwa_load)
+        # srv_switch_model_iiwa(req_switch_model_iiwa)
+        srv_switch_model_iiwa(['PositionJointInterface_trajectory_controller'], [], 1)
+
+
+        # Robotics hand
+        # SRV
+        rospy.wait_for_service("/reflex_takktile_2/controller_manager/load_controller")
+        srv_load_model_reflex = rospy.ServiceProxy('/reflex_takktile_2/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_preshape_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_preshape_2 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_proximal_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_proximal_2 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_proximal_3 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_distal_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_distal_2 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_distal_3 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController) 
+        rospy.wait_for_service("/reflex_takktile_2/controller_manager/load_controller")
+        srv_switch_model_reflex = rospy.ServiceProxy('/reflex_takktile_2/controller_manager/switch_controller', SwitchController)
+
+
+        # message 
+        req_load_model_reflex_joint = "name: 'joint_state_controller'"
+        req_load_model_reflex_preshape_1 = "name: 'preshape_1_position_controller'"
+        req_load_model_reflex_preshape_2 = "name: 'preshape_2_position_controller'"
+        req_load_model_reflex_proximal_1 = "name: 'proximal_joint_1_position_controller'"
+        req_load_model_reflex_proximal_2 = "name: 'proximal_joint_2_position_controller'"
+        req_load_model_reflex_proximal_3 = "name: 'proximal_joint_3_position_controller'"
+        req_load_model_reflex_distal_1 = "name: 'distal_joint_1_position_controller'"
+        req_load_model_reflex_distal_2 = "name: 'distal_joint_2_position_controller'"
+        req_load_model_reflex_distal_3 = "name: 'distal_joint_3_position_controller'"
+        # req_switch_model_reflex = "{start_controllers: ['joint_state_controller', 'preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], stop_controllers: [], strictness: 9}"
+
+        # Call
+        # srv_load_model_reflex(req_load_model_reflex_joint)
+        # srv_load_model_reflex(req_load_model_reflex_preshape_1)
+        # srv_load_model_reflex(req_load_model_reflex_preshape_2)
+        # srv_load_model_reflex(req_load_model_reflex_proximal_1)
+        # srv_load_model_reflex(req_load_model_reflex_proximal_2)
+        # srv_load_model_reflex(req_load_model_reflex_proximal_3)
+        # srv_load_model_reflex(req_load_model_reflex_distal_1)
+        # srv_load_model_reflex(req_load_model_reflex_distal_2)
+        # srv_load_model_reflex(req_load_model_reflex_distal_3)
+        # srv_switch_model_reflex(req_switch_model_reflex)
+        srv_switch_model_reflex(['joint_state_controller', 'preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], [], 1)
+
+    def load_stop_controller(self):
+        '''
+        Call the service to spawn controller
+
+        EX:
+            # IIwa
+            rosservice call /iiwa/controller_manager/load_controller "name: 'PositionJointInterface_trajectory_controller'"
+            rosservice call /iiwa/controller_manager/switch_controller "{start_controllers: ['PositionJointInterface_trajectory_controller'], stop_controllers: [], strictness: 1}"
+
+            Reflex:
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'joint_state_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'preshape_1_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'preshape_2_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'proximal_joint_1_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'proximal_joint_2_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'proximal_joint_3_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'distal_joint_1_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'distal_joint_2_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'distal_joint_3_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: ['joint_state_controller', preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], stop_controllers: [], strictness: 2}"
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: [], stop_controllers: ['joint_state_controller', preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], strictness: 2}"
+            
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: [preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], stop_controllers: [], strictness: 2}"
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: [], stop_controllers: [preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], strictness: 9}"
+        
+        '''
+        # from control_msgs.srv import SwitchController
+        # from control_msgs.srv import LoadController
+        # service service
+        
+        # IIWA
+        rospy.wait_for_service("/iiwa/controller_manager/load_controller")
+        srv_load_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        rospy.wait_for_service("/iiwa/controller_manager/switch_controller")
+        srv_switch_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/switch_controller', SwitchController)
+        # srv_switch_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/switch_controller', SwitchControllerRequest)
+        # service message
+        req_iiwa_load = "name: 'PositionJointInterface_trajectory_controller'"
+        # req_switch_model_iiwa = SwitchControllerRequest()
+        # req_switch_model_iiwa.start_controllers = "['PositionJointInterface_trajectory_controller']"
+        # req_switch_model_iiwa.stop_controllers = "[]"
+        # req_switch_model_iiwa.strictness = 1
+        # req_switch_model_iiwa.BEST_EFFORT = 1# int32 BEST_EFFORT=1
+        # req_switch_model_iiwa.STRICT = 2# int32 STRICT=2
+        # req_switch_model_iiwa = "{start_controllers: ['PositionJointInterface_trajectory_controller'], stop_controllers: [], strictness: 1}"
+        # service call
+        # srv_load_model_iiwa(req_iiwa_load)
+        # srv_switch_model_iiwa(req_switch_model_iiwa)
+        srv_switch_model_iiwa([], ['PositionJointInterface_trajectory_controller'], 1)
+
+
+        # Robotics hand
+        # SRV
+        rospy.wait_for_service("/reflex_takktile_2/controller_manager/load_controller")
+        srv_load_model_reflex = rospy.ServiceProxy('/reflex_takktile_2/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_preshape_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_preshape_2 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_proximal_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_proximal_2 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_proximal_3 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_distal_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_distal_2 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # srv_load_model_reflex_distal_3 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController) 
+        rospy.wait_for_service("/reflex_takktile_2/controller_manager/load_controller")
+        srv_switch_model_reflex = rospy.ServiceProxy('/reflex_takktile_2/controller_manager/switch_controller', SwitchController)
+
+
+        # message 
+        req_load_model_reflex_joint = "name: 'joint_state_controller'"
+        req_load_model_reflex_preshape_1 = "name: 'preshape_1_position_controller'"
+        req_load_model_reflex_preshape_2 = "name: 'preshape_2_position_controller'"
+        req_load_model_reflex_proximal_1 = "name: 'proximal_joint_1_position_controller'"
+        req_load_model_reflex_proximal_2 = "name: 'proximal_joint_2_position_controller'"
+        req_load_model_reflex_proximal_3 = "name: 'proximal_joint_3_position_controller'"
+        req_load_model_reflex_distal_1 = "name: 'distal_joint_1_position_controller'"
+        req_load_model_reflex_distal_2 = "name: 'distal_joint_2_position_controller'"
+        req_load_model_reflex_distal_3 = "name: 'distal_joint_3_position_controller'"
+        # req_switch_model_reflex = "{start_controllers: ['joint_state_controller', 'preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], stop_controllers: [], strictness: 9}"
+
+        # Call
+        # srv_load_model_reflex(req_load_model_reflex_joint)
+        # srv_load_model_reflex(req_load_model_reflex_preshape_1)
+        # srv_load_model_reflex(req_load_model_reflex_preshape_2)
+        # srv_load_model_reflex(req_load_model_reflex_proximal_1)
+        # srv_load_model_reflex(req_load_model_reflex_proximal_2)
+        # srv_load_model_reflex(req_load_model_reflex_proximal_3)
+        # srv_load_model_reflex(req_load_model_reflex_distal_1)
+        # srv_load_model_reflex(req_load_model_reflex_distal_2)
+        # srv_load_model_reflex(req_load_model_reflex_distal_3)
+        # srv_switch_model_reflex(req_switch_model_reflex)
+        # srv_switch_model_reflex([], ['joint_state_controller', 'preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], 2)
+
+        srv_switch_model_reflex([], ['preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], 1)
+
+
+        
+

@@ -510,6 +510,14 @@ def main():
     # Create the model
     model = create_model()
     env = init_env()
+    # env.reset()
+    # slide_object(env)
+    # slide_object(env)
+    # slide_object(env)
+    # slide_object(env)
+
+    # print("end before sleep!")
+    # rospy.sleep(150)
     # memory = create_demo(env)
     # GAMMA = 0.95
     # model = training_from_demo(model, memory, GAMMA)
