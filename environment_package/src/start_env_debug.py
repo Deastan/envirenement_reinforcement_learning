@@ -488,13 +488,16 @@ def load_trained_model(weights_path):
 
 def catch_object(env):
     env.reset()
-    env.set_endEffector_pose([0.5, 0.0, 0.1, 3.1457, 0.0, 0.0])
+
     rospy.sleep(15)
+    env.set_endEffector_pose([0.5, 0.0, 0.1, 3.1457, 0.0, 0.0])
+    
     env.set_endEffector_pose([0.5, 0.0, 0.3, 3.1457, 0.0, 0.0])
     env.set_endEffector_pose([0.0, 0.5, 0.30, 3.1457, 0.0, 0.0])
 
 def slide_object(env):
     env.reset()
+    # rospy.sleep(20)
     env.set_endEffector_pose([0.4, 0.3, 0.1, 3.1457, 0.0, 0.0])
     # rospy.sleep(15)
     env.set_endEffector_pose([0.4, 0.1, 0.1, 3.1457, 0.0, 0.0])
@@ -511,10 +514,10 @@ def main():
     model = create_model()
     env = init_env()
     # env.reset()
-    # slide_object(env)
-    # slide_object(env)
-    # slide_object(env)
-    # slide_object(env)
+    slide_object(env)
+    slide_object(env)
+    slide_object(env)
+    slide_object(env)
 
     # print("end before sleep!")
     # rospy.sleep(150)
@@ -524,7 +527,7 @@ def main():
     # qlearning(env)
     # catch_object(env)
     # slide_object(env)
-    dqn_learning_keras_memoryReplay(env, model)
+    # dqn_learning_keras_memoryReplay(env, model)
     # create_demo(env)
     print("end")
 

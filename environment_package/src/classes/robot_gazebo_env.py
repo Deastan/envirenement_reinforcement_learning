@@ -69,6 +69,18 @@ class RobotGazeboEnv(gym.Env):
         self.bool_init_joint_or_pose = False
         self.constant_z = 0.10
 
+        # Init WORLD
+        launch_file_name="spawn_tf.launch"
+        pkg_string = "/home/roboticlab14/catkin_ws/src/reflex-ros-pkg/reflex_control/"
+        # Prepare the path
+        pkg_path = os.path.normpath(pkg_string)
+        uuid = roslaunch.rlutil.get_or_generate_uuid(None, False) #OK
+        roslaunch.configure_logging(uuid)
+        launch_dir = os.path.join(pkg_path, "launch") #ok
+        path_launch_file_name = os.path.join(launch_dir, launch_file_name)
+        self.launch = roslaunch.parent.ROSLaunchParent(uuid, [path_launch_file_name]) #ok
+        # launch.start()
+
         # Creation of moveit variables
         # self.moveit_object = MoveIiwa()
         self.pub_cartesianPose = rospy.Publisher('/iiwa/moveToCartesianPose', Pose, queue_size=1)
@@ -263,9 +275,9 @@ class RobotGazeboEnv(gym.Env):
 
         # Robot REMOVE AND SPAWN ********************************
         # self.load_stop_controller()
-        # self.remove_robot()
+        self.remove_robot()
         # rospy.sleep(0.05)
-        # self.spawn_robot()
+        self.spawn_robot()
         # rospy.sleep(10.05)
         # rospy.sleep(0.05)
 
@@ -291,7 +303,7 @@ class RobotGazeboEnv(gym.Env):
         # path_launch_file_name = os.path.join(launch_dir, launch_file_name)
         # # Launch the roslaunch
         # launch = roslaunch.parent.ROSLaunchParent(uuid, [path_launch_file_name]) #ok
-        # launch.start()
+        self.launch.start()
         # rospy.sleep(5.0)
 
         # self.set_endEffector_pose([0.4, 0.1, 0.1, 3.1457, 0.0, 0.0])
@@ -771,71 +783,120 @@ class RobotGazeboEnv(gym.Env):
             rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: [], stop_controllers: [preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], strictness: 9}"
         
         '''
-        # from control_msgs.srv import SwitchController
-        # from control_msgs.srv import LoadController
-        # service service
+        # # from control_msgs.srv import SwitchController
+        # # from control_msgs.srv import LoadController
+        # # service service
         
-        # IIWA
-        rospy.wait_for_service("/iiwa/controller_manager/load_controller")
-        srv_load_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
-        rospy.wait_for_service("/iiwa/controller_manager/switch_controller")
-        srv_switch_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/switch_controller', SwitchController)
-        # srv_switch_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/switch_controller', SwitchControllerRequest)
-        # service message
-        req_iiwa_load = "name: 'PositionJointInterface_trajectory_controller'"
-        # req_switch_model_iiwa = SwitchControllerRequest()
-        # req_switch_model_iiwa.start_controllers = "['PositionJointInterface_trajectory_controller']"
-        # req_switch_model_iiwa.stop_controllers = "[]"
-        # req_switch_model_iiwa.strictness = 1
-        # req_switch_model_iiwa.BEST_EFFORT = 1# int32 BEST_EFFORT=1
-        # req_switch_model_iiwa.STRICT = 2# int32 STRICT=2
-        # req_switch_model_iiwa = "{start_controllers: ['PositionJointInterface_trajectory_controller'], stop_controllers: [], strictness: 1}"
-        # service call
+        # # IIWA
+        # # rospy.wait_for_service("/iiwa/controller_manager/load_controller")
+        # srv_load_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # # rospy.wait_for_service("/iiwa/controller_manager/switch_controller")
+        # srv_switch_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/switch_controller', SwitchController)
+        # # srv_switch_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/switch_controller', SwitchControllerRequest)
+        # # service message
+        # req_iiwa_load = "name: 'PositionJointInterface_trajectory_controller'"
+        # # req_switch_model_iiwa = SwitchControllerRequest()
+        # # req_switch_model_iiwa.start_controllers = "['PositionJointInterface_trajectory_controller']"
+        # # req_switch_model_iiwa.stop_controllers = "[]"
+        # # req_switch_model_iiwa.strictness = 1
+        # # req_switch_model_iiwa.BEST_EFFORT = 1# int32 BEST_EFFORT=1
+        # # req_switch_model_iiwa.STRICT = 2# int32 STRICT=2
+        # # req_switch_model_iiwa = "{start_controllers: ['PositionJointInterface_trajectory_controller'], stop_controllers: [], strictness: 1}"
+        # # service call
         # srv_load_model_iiwa(req_iiwa_load)
-        # srv_switch_model_iiwa(req_switch_model_iiwa)
+        # # srv_switch_model_iiwa(req_switch_model_iiwa)
+        # srv_switch_model_iiwa(['PositionJointInterface_trajectory_controller'], [], 1)
+        # print("Loaded controller: iiwa")
+
+        # # Robotics hand
+        # # SRV
+        # # rospy.wait_for_service("/reflex_takktile_2/controller_manager/load_controller")
+        # srv_load_model_reflex = rospy.ServiceProxy('/reflex_takktile_2/controller_manager/load_controller', LoadController)
+        # # srv_load_model_reflex_preshape_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # # srv_load_model_reflex_preshape_2 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # # srv_load_model_reflex_proximal_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # # srv_load_model_reflex_proximal_2 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # # srv_load_model_reflex_proximal_3 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # # srv_load_model_reflex_distal_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # # srv_load_model_reflex_distal_2 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        # # srv_load_model_reflex_distal_3 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController) 
+        # # rospy.wait_for_service("/reflex_takktile_2/controller_manager/load_controller")
+        # srv_switch_model_reflex = rospy.ServiceProxy('/reflex_takktile_2/controller_manager/switch_controller', SwitchController)
+
+
+        # # message 
+        # req_load_model_reflex_joint = "name: 'joint_state_controller'"
+        # req_load_model_reflex_preshape_1 = "name: 'preshape_1_position_controller'"
+        # req_load_model_reflex_preshape_2 = "name: 'preshape_2_position_controller'"
+        # req_load_model_reflex_proximal_1 = "name: 'proximal_joint_1_position_controller'"
+        # req_load_model_reflex_proximal_2 = "name: 'proximal_joint_2_position_controller'"
+        # req_load_model_reflex_proximal_3 = "name: 'proximal_joint_3_position_controller'"
+        # req_load_model_reflex_distal_1 = "name: 'distal_joint_1_position_controller'"
+        # req_load_model_reflex_distal_2 = "name: 'distal_joint_2_position_controller'"
+        # req_load_model_reflex_distal_3 = "name: 'distal_joint_3_position_controller'"
+        # # req_switch_model_reflex = "{start_controllers: ['joint_state_controller', 'preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], stop_controllers: [], strictness: 9}"
+
+        # # Call
+        # # srv_load_model_reflex(req_load_model_reflex_joint)
+        
+        # # srv_load_model_reflex(req_load_model_reflex_preshape_1)
+        # # srv_load_model_reflex(req_load_model_reflex_preshape_2)
+        # # srv_load_model_reflex(req_load_model_reflex_proximal_1)
+        # # srv_load_model_reflex(req_load_model_reflex_proximal_2)
+        # # srv_load_model_reflex(req_load_model_reflex_proximal_3)
+        # # srv_load_model_reflex(req_load_model_reflex_distal_1)
+        # # srv_load_model_reflex(req_load_model_reflex_distal_2)
+        # # srv_load_model_reflex(req_load_model_reflex_distal_3)
+        # # srv_switch_model_reflex(req_switch_model_reflex)
+        # # srv_switch_model_reflex(['joint_state_controller', 'preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], [], 1)
+        # srv_switch_model_reflex(['joint_state_controller'], [], 1)
+        # print("Loaded controller: joint_state_controller")
+
+
+        # rosservice call /iiwa/controller_manager/load_controller "name: 'PositionJointInterface_trajectory_controller'"
+        
+        srv_load_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
+        rospy.wait_for_service("/iiwa/controller_manager/load_controller")
+        req_iiwa_load = LoadController()
+        req_iiwa_load.name = "PositionJointInterface_trajectory_controller"
+        srv_load_model_iiwa(req_iiwa_load.name)
+        # rosservice call /iiwa/controller_manager/switch_controller "{start_controllers: ['PositionJointInterface_trajectory_controller'], stop_controllers: [], strictness: 1}"
+        srv_switch_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/switch_controller', SwitchController)
+        rospy.wait_for_service("/iiwa/controller_manager/switch_controller")
         srv_switch_model_iiwa(['PositionJointInterface_trajectory_controller'], [], 1)
+        print("Loaded controller: iiwa")
 
-
-        # Robotics hand
-        # SRV
-        rospy.wait_for_service("/reflex_takktile_2/controller_manager/load_controller")
+        # rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'joint_state_controller'"
         srv_load_model_reflex = rospy.ServiceProxy('/reflex_takktile_2/controller_manager/load_controller', LoadController)
-        # srv_load_model_reflex_preshape_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
-        # srv_load_model_reflex_preshape_2 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
-        # srv_load_model_reflex_proximal_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
-        # srv_load_model_reflex_proximal_2 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
-        # srv_load_model_reflex_proximal_3 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
-        # srv_load_model_reflex_distal_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
-        # srv_load_model_reflex_distal_2 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
-        # srv_load_model_reflex_distal_3 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController) 
         rospy.wait_for_service("/reflex_takktile_2/controller_manager/load_controller")
+        req_load_model_reflex_joint= LoadController()
+        req_load_model_reflex_joint.name  = "joint_state_controller"
+        srv_load_model_reflex(req_load_model_reflex_joint.name)
+
+        # Other controller...
+        req_load_model_reflex_joint.name  = "preshape_1_position_controller"
+        srv_load_model_reflex(req_load_model_reflex_joint.name)
+        req_load_model_reflex_joint.name  = "preshape_2_position_controller"
+        srv_load_model_reflex(req_load_model_reflex_joint.name)
+        req_load_model_reflex_joint.name  = "proximal_joint_1_position_controller"
+        srv_load_model_reflex(req_load_model_reflex_joint.name)
+        req_load_model_reflex_joint.name  = "proximal_joint_2_position_controller"
+        srv_load_model_reflex(req_load_model_reflex_joint.name)
+        req_load_model_reflex_joint.name  = "proximal_joint_3_position_controller"
+        srv_load_model_reflex(req_load_model_reflex_joint.name)
+        req_load_model_reflex_joint.name  = "distal_joint_1_position_controller"
+        srv_load_model_reflex(req_load_model_reflex_joint.name)
+        req_load_model_reflex_joint.name  = "distal_joint_2_position_controller"
+        srv_load_model_reflex(req_load_model_reflex_joint.name)
+        req_load_model_reflex_joint.name  = "distal_joint_3_position_controller"
+        srv_load_model_reflex(req_load_model_reflex_joint.name)
+        # srv_load_model_reflex("{start_controllers: ['PositionJointInterface_trajectory_controller'], stop_controllers: [], strictness: 1}")
+        # rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: ['joint_state_controller'], stop_controllers: [], strictness: 2}"  
         srv_switch_model_reflex = rospy.ServiceProxy('/reflex_takktile_2/controller_manager/switch_controller', SwitchController)
-
-
-        # message 
-        req_load_model_reflex_joint = "name: 'joint_state_controller'"
-        req_load_model_reflex_preshape_1 = "name: 'preshape_1_position_controller'"
-        req_load_model_reflex_preshape_2 = "name: 'preshape_2_position_controller'"
-        req_load_model_reflex_proximal_1 = "name: 'proximal_joint_1_position_controller'"
-        req_load_model_reflex_proximal_2 = "name: 'proximal_joint_2_position_controller'"
-        req_load_model_reflex_proximal_3 = "name: 'proximal_joint_3_position_controller'"
-        req_load_model_reflex_distal_1 = "name: 'distal_joint_1_position_controller'"
-        req_load_model_reflex_distal_2 = "name: 'distal_joint_2_position_controller'"
-        req_load_model_reflex_distal_3 = "name: 'distal_joint_3_position_controller'"
-        # req_switch_model_reflex = "{start_controllers: ['joint_state_controller', 'preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], stop_controllers: [], strictness: 9}"
-
-        # Call
-        # srv_load_model_reflex(req_load_model_reflex_joint)
-        # srv_load_model_reflex(req_load_model_reflex_preshape_1)
-        # srv_load_model_reflex(req_load_model_reflex_preshape_2)
-        # srv_load_model_reflex(req_load_model_reflex_proximal_1)
-        # srv_load_model_reflex(req_load_model_reflex_proximal_2)
-        # srv_load_model_reflex(req_load_model_reflex_proximal_3)
-        # srv_load_model_reflex(req_load_model_reflex_distal_1)
-        # srv_load_model_reflex(req_load_model_reflex_distal_2)
-        # srv_load_model_reflex(req_load_model_reflex_distal_3)
-        # srv_switch_model_reflex(req_switch_model_reflex)
+        rospy.wait_for_service("/reflex_takktile_2/controller_manager/switch_controller")
         srv_switch_model_reflex(['joint_state_controller', 'preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], [], 1)
+        # srv_switch_model_reflex("{start_controllers: ['joint_state_controller'], stop_controllers: [], strictness: 2}")
+        print("Loaded controller: joint_state_controller")
 
     def load_stop_controller(self):
         '''
@@ -886,12 +947,12 @@ class RobotGazeboEnv(gym.Env):
         # srv_load_model_iiwa(req_iiwa_load)
         # srv_switch_model_iiwa(req_switch_model_iiwa)
         srv_switch_model_iiwa([], ['PositionJointInterface_trajectory_controller'], 1)
-
+        
 
         # Robotics hand
         # SRV
-        rospy.wait_for_service("/reflex_takktile_2/controller_manager/load_controller")
-        srv_load_model_reflex = rospy.ServiceProxy('/reflex_takktile_2/controller_manager/load_controller', LoadController)
+        # rospy.wait_for_service("/reflex_takktile_2/controller_manager/load_controller")
+        # srv_load_model_reflex = rospy.ServiceProxy('/reflex_takktile_2/controller_manager/load_controller', LoadController)
         # srv_load_model_reflex_preshape_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
         # srv_load_model_reflex_preshape_2 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
         # srv_load_model_reflex_proximal_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
@@ -900,7 +961,7 @@ class RobotGazeboEnv(gym.Env):
         # srv_load_model_reflex_distal_1 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
         # srv_load_model_reflex_distal_2 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController)
         # srv_load_model_reflex_distal_3 = rospy.ServiceProxy('/iiwa/controller_manager/load_controller', LoadController) 
-        rospy.wait_for_service("/reflex_takktile_2/controller_manager/load_controller")
+        rospy.wait_for_service("/reflex_takktile_2/controller_manager/switch_controller")
         srv_switch_model_reflex = rospy.ServiceProxy('/reflex_takktile_2/controller_manager/switch_controller', SwitchController)
 
 
@@ -929,7 +990,7 @@ class RobotGazeboEnv(gym.Env):
         # srv_switch_model_reflex(req_switch_model_reflex)
         # srv_switch_model_reflex([], ['joint_state_controller', 'preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], 2)
 
-        srv_switch_model_reflex([], ['preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], 1)
+        srv_switch_model_reflex([], ['joint_state_controller', 'preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], 1)
 
 
         
