@@ -173,7 +173,7 @@ def training_from_demo(model, memory_from_demo, GAMMA):
 def create_demo(env):
     # constant_z = 0.1
     action = [1, 3, 3, 3, 3, 3, 3]
-    demo_epoch = 1
+    demo_epoch = 20
     demo_step = len(action)
     observation_space = 7
     deck_size = 2*demo_step*demo_epoch
@@ -223,6 +223,7 @@ def create_demo(env):
             np_new_state = np.reshape(np_new_state, [1, observation_space])
             memory_from_demo.append((np_state, action, reward, np_new_state, done))
             np_state = np_new_state
+            state = new_state
             j+=1
         i+=1
     action = [3, 3, 3, 3, 3, 3, 1]
@@ -249,6 +250,7 @@ def create_demo(env):
             np_new_state = np.reshape(np_new_state, [1, observation_space])
             memory_from_demo.append((np_state, action, reward, np_new_state, done))
             np_state = np_new_state
+            state = new_state
             j+=1
         i+=1
     
@@ -263,7 +265,7 @@ def dqn_learning_keras_memoryReplay(env, model):
     # Time optimzation:
     
 
-    EPISODE_MAX = 4000
+    EPISODE_MAX = 3500
     MAX_STEPS = 15
     #PARAMS
     GAMMA = 0.95
@@ -365,6 +367,7 @@ def dqn_learning_keras_memoryReplay(env, model):
             list_memory.append([np_state, action, reward, np_new_state, done])
 
             np_state = np_new_state
+            state = new_state
             total_reward += reward
             
             print("[ INFO] Time for the step ", j, ": ", time.time()-time_start_step)
@@ -398,7 +401,7 @@ def dqn_learning_keras_memoryReplay(env, model):
         # # plt.close(fig)
         # # plt.show(False)
 
-        if i%50 == 0:
+        if i%20 == 0:
             # Save the model
             print("Saving...")
             # model.save('/home/roboticlab14/catkin_ws/src/envirenement_reinforcement_learning/environment_package/src/saves/model/try_1.h5')
@@ -486,6 +489,37 @@ def load_trained_model(weights_path):
 
     return model
 
+def use_model(env, model):
+    '''
+    Use a trained model 
+    '''
+    epidodes_max = 2
+    demo_step = 10
+    observation_space = 7
+    for i in range(0, epidodes_max):
+        j = 0
+        state = env.reset()
+        np_state = (np.array(state, dtype=np.float32),)
+        np_state = np.reshape(np_state, [1, observation_space])
+        for j in range(0, demo_step):
+
+            q_values = model.predict(np_state)
+            disc_action = discrete_action(np.argmax(q_values[0]))
+            new_state, reward, done, info = env.step(disc_action)
+            # print("*********************************************")
+            # print("Observation: ", new_state)
+            # print("Reward: ", reward)
+            # print("Done: ", done)
+            # print("Episode: ", i)
+            # print("Step: ", j)
+            # print("*********************************************")
+            np_new_state = (np.array(new_state, dtype=np.float32),)
+            np_new_state = np.reshape(np_new_state, [1, observation_space])
+            np_state = np_new_state
+            state = new_state
+            j+=1
+        i+=1
+
 def catch_object(env):
     env.reset()
     env.set_endEffector_pose([0.5, 0.0, 0.1, 3.1457, 0.0, 0.0])
@@ -507,18 +541,22 @@ def main():
     # env = init_env()
     # env.reset()
 
-    # Create the model
-    model = create_model()
-    env = init_env()
-    # memory = create_demo(env)
-    # GAMMA = 0.95
-    # model = training_from_demo(model, memory, GAMMA)
-    # qlearning(env)
-    # catch_object(env)
-    # slide_object(env)
-    dqn_learning_keras_memoryReplay(env, model)
-    # create_demo(env)
-    print("end")
+    training = True
+    if training:
+        # Training using demos
+        model = create_model()
+        env = init_env()
+        memory = create_demo(env)
+        GAMMA = 0.95
+        model = training_from_demo(model, memory, GAMMA)
+        dqn_learning_keras_memoryReplay(env, model)
+    else:
+        # Predict model
+        model = load_trained_model("/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position_450/model/try_1.h5")
+        env = init_env()
+        use_model(env, model)
+
+    print("End")
 
 if __name__ == '__main__':
     main()
