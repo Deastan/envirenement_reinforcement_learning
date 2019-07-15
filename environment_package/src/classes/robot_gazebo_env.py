@@ -16,6 +16,7 @@ import rospkg
 import git
 import sys
 import time
+import random
 
 #moveit
 import moveit_commander
