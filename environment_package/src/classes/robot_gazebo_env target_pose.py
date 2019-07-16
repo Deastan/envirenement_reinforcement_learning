@@ -63,7 +63,7 @@ class RobotGazeboEnv(gym.Env):
         #Gazebo:
         self.reset_simulation_proxy = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
         self.reset_world_proxy = rospy.ServiceProxy('/gazebo/reset_world', Empty)
-        self.reset_world_or_sim = "NO_RESET" # SIMULATION WORLD NO_RESET
+        self.reset_world_or_sim = "WORLD" # SIMULATION WORLD NO_RESET
         self.unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
         self.pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
 
@@ -78,7 +78,6 @@ class RobotGazeboEnv(gym.Env):
         moveit_commander.roscpp_initialize(sys.argv)
         self.robot = moveit_commander.RobotCommander()
         self.scene = moveit_commander.PlanningSceneInterface()
-        
 
         # Form the motion planning request
         # req = MotionPlanRequest()
@@ -120,8 +119,6 @@ class RobotGazeboEnv(gym.Env):
         self.target_position.append(target_x)
         self.target_position.append(target_y)
         self.target_position.append(target_z)
-
-        self.continuous = False # waiting on a result
 
         # Reward
         self.out_workspace = False
@@ -172,7 +169,6 @@ class RobotGazeboEnv(gym.Env):
         """
         
         # self._init_env_variables()
-        result = self.random_target_position()
         self.load_stop_controller()
         self.pause()
         self._reset_sim()
@@ -180,21 +176,12 @@ class RobotGazeboEnv(gym.Env):
         # self.load_start_controller()
         self.start_controller()
         # self.launch.start() # add the node to close the hand
-        
-        # Add and delete OBJECT 
-        self.remove_object()
-        # rospy.sleep(0.1)
-        self.spawn_object()
-        self._init_pose()
 
-        # rospy.sleep(1.5)
-        # init_action = [0.6, 0.1, self.constant_z, 3.1457, 0.0, 0.0]
-        # self.continuous = self.set_endEffector_pose(init_action)
-        # while not self.continuous:
-        #     print("Continuer: ", self.continuous)
-        # self.continuous = False
-        # self._init_env_variables()
-        # rospy.sleep(2.0)
+        # self._init_pose()
+        init_action = [0.6, 0.1, self.constant_z, 3.1457, 0.0, 0.0]
+        self.set_endEffector_pose(init_action)
+        self._init_env_variables()
+        
         return self._get_obs()
 
     def close(self):
@@ -247,9 +234,8 @@ class RobotGazeboEnv(gym.Env):
             # init_joint = [0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 0.0]
             self.set_joints_execute(init_joint)
         else:
-            init_action = [0.6, 0.1, self.constant_z, 3.1457, 0.0, 0.0]
+            init_action = [0.5, 0.1, self.constant_z, 3.1457, 0.0, 0.0]
             self.set_endEffector_pose(init_action)
-        self._init_env_variables()
         return True
 
     def _init_env_variables(self):
@@ -257,6 +243,7 @@ class RobotGazeboEnv(gym.Env):
         # self.step_circle = 0
         self.last_pose = self.get_endEffector_pose().pose
         self.current_pose = self.last_pose
+        self.random_target_position()
         
         return True
 
@@ -276,9 +263,9 @@ class RobotGazeboEnv(gym.Env):
         else:
             print("ERROR: CANNOT RESET GAZEBO!")
         
-        # # Add and delete OBJECT 
+        # Add and delete OBJECT 
         # self.remove_object()
-        # # rospy.sleep(0.1)
+        # rospy.sleep(0.1)
         # self.spawn_object()
 
         # Robot REMOVE AND SPAWN ********************************
@@ -317,9 +304,9 @@ class RobotGazeboEnv(gym.Env):
         last_observation.append(self.current_pose.orientation.z)
         last_observation.append(self.current_pose.orientation.w)
         # Add the target position to the observation:
-        last_observation.append(self.target_position[0])
-        last_observation.append(self.target_position[1])
-        last_observation.append(self.target_position[2])
+        observation.append(self.target_position[0])
+        observation.append(self.target_position[1])
+        observation.append(self.target_position[2])
 
         self.last_observation = last_observation
         
@@ -504,6 +491,15 @@ class RobotGazeboEnv(gym.Env):
         pose_goal.orientation.z = q_interm[2]
         pose_goal.orientation.w = q_interm[3]
         # pose_goal.orientation =  q_mult(q_rot, current_pose.orientation)
+        
+        #***************************************************************************************************
+        # WARNING SHORTCUT!!!
+        # pose_goal.orientation.w = 1.0
+        # pose_goal.position.x = 0.7*math.cos(self.step_circle)
+        # pose_goal.position.y = 0.7*math.sin(self.step_circle)
+        # pose_goal.position.z = 0.7#current_pose.position.z + action[2]
+        # self.step_circle +=0.078539816339#0.1
+        #***************************************************************************************************
 
         # Check if point is in the workspace:
         # bool_check_workspace = self.check_workspace(pose_goal)
@@ -633,8 +629,8 @@ class RobotGazeboEnv(gym.Env):
         orientation = [0.0, 0.0, 0.0]
         quaternion = tft.quaternion_from_euler(orientation[0], orientation[1], orientation[2])
         object_pose = Pose()
-        object_pose.position.x = float(self.target_position[0])
-        object_pose.position.y = float(self.target_position[1])
+        object_pose.position.x = float(0.5)
+        object_pose.position.y = float(0.0)
         object_pose.position.z = float(0.5)
         object_pose.orientation.x = quaternion[0]
         object_pose.orientation.y = quaternion[1]
@@ -794,7 +790,29 @@ class RobotGazeboEnv(gym.Env):
 
     def start_controller(self):
         '''
-        Call the service to start controller
+        Call the service to spawn controller
+
+        EX:
+            # IIwa
+            rosservice call /iiwa/controller_manager/load_controller "name: 'PositionJointInterface_trajectory_controller'"
+            rosservice call /iiwa/controller_manager/switch_controller "{start_controllers: ['PositionJointInterface_trajectory_controller'], stop_controllers: [], strictness: 1}"
+
+            Reflex:
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'joint_state_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'preshape_1_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'preshape_2_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'proximal_joint_1_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'proximal_joint_2_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'proximal_joint_3_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'distal_joint_1_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'distal_joint_2_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'distal_joint_3_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: ['joint_state_controller', preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], stop_controllers: [], strictness: 2}"
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: [], stop_controllers: ['joint_state_controller', preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], strictness: 2}"
+            
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: [preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], stop_controllers: [], strictness: 2}"
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: [], stop_controllers: [preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], strictness: 9}"
+        
         '''
         # iiwa
         srv_switch_model_iiwa = rospy.ServiceProxy('/iiwa/controller_manager/switch_controller', SwitchController)
@@ -807,9 +825,33 @@ class RobotGazeboEnv(gym.Env):
         rospy.wait_for_service("/reflex_takktile_2/controller_manager/switch_controller")
         srv_switch_model_reflex(['joint_state_controller', 'preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], [], 1)
 
+
+
     def load_stop_controller(self):
         '''
-        Call the service to stop controller
+        Call the service to spawn controller
+
+        EX:
+            # IIwa
+            rosservice call /iiwa/controller_manager/load_controller "name: 'PositionJointInterface_trajectory_controller'"
+            rosservice call /iiwa/controller_manager/switch_controller "{start_controllers: ['PositionJointInterface_trajectory_controller'], stop_controllers: [], strictness: 1}"
+
+            Reflex:
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'joint_state_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'preshape_1_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'preshape_2_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'proximal_joint_1_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'proximal_joint_2_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'proximal_joint_3_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'distal_joint_1_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'distal_joint_2_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/load_controller "name: 'distal_joint_3_position_controller'"
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: ['joint_state_controller', preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], stop_controllers: [], strictness: 2}"
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: [], stop_controllers: ['joint_state_controller', preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], strictness: 2}"
+            
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: [preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], stop_controllers: [], strictness: 2}"
+            rosservice call /reflex_takktile_2/controller_manager/switch_controller "{start_controllers: [], stop_controllers: [preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], strictness: 9}"
+        
         '''
         # IIWA
         rospy.wait_for_service("/iiwa/controller_manager/switch_controller")
@@ -825,23 +867,16 @@ class RobotGazeboEnv(gym.Env):
         # Call
         srv_switch_model_reflex([], ['joint_state_controller', 'preshape_1_position_controller', 'preshape_2_position_controller', 'proximal_joint_1_position_controller', 'proximal_joint_2_position_controller', 'proximal_joint_3_position_controller', 'distal_joint_1_position_controller', 'distal_joint_2_position_controller', 'distal_joint_3_position_controller'], 1)
 
-    def random_target_position(self):
+    def random_target_position():
         # Workspace
         # self.check_workspace(pose)
         result = False
         object_pose = Pose()
-        # print(random.uniform(-1, 1))
-        # print(random.uniform(-1, 1))
-        # print(random.uniform(-1, 1))
-        # print(random.uniform(-1, 1))
-        # print(random.uniform(-1, 1))
-        # print(random.uniform(-1, 1))
-        # print(random.uniform(-1, 1))
-        while result==False:
-            object_pose.position.x = random.uniform(0.4, 0.7)
-            object_pose.position.y = random.uniform(-0.6, 0.6)
+        
+        while result:
+            object_pose.position.x = random.uniform(-1, 1)
+            object_pose.position.y = random.uniform(-1, 1)
             object_pose.position.z = 0.1
-            # print("Target is: (", object_pose.position.x, ", ", object_pose.position.y, ", ", object_pose.position.z, ")")
             result = self.check_workspace(object_pose)
         # x_min = 
         # y_min =
@@ -850,11 +885,8 @@ class RobotGazeboEnv(gym.Env):
         # y_max =
         # z_max =
         # random.uniform(a, b)
-        # print("Target is: (", object_pose.position.x, ", ", object_pose.position.y, ", ", object_pose.position.z, ")")
         self.target_position[0] = object_pose.position.x
         self.target_position[1] = object_pose.position.y
         self.target_position[2] = object_pose.position.z
-
-        return result
 
 

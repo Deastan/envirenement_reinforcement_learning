@@ -70,8 +70,6 @@ def init_env():
     print("Gym environment done: RobotGazeboEnv-v0")
     return env
 
-
-
 def discrete_action(action):
     '''
     Transform the asking action to a discretize action to simplify the problem 
@@ -228,6 +226,7 @@ def create_demo(env):
         i+=1
     action = [3, 3, 3, 3, 3, 3, 1]
     i = 0
+
     for i in range(0, demo_epoch):
         j = 0
         state = env.reset()
@@ -264,27 +263,23 @@ def dqn_learning_keras_memoryReplay(env, model):
 
     # Time optimzation:
     
-
-    EPISODE_MAX = 3500
-    MAX_STEPS = 15
+    EPISODE_MAX = 4500
+    MAX_STEPS = 20
     #PARAMS
     GAMMA = 0.95
     LEARNING_RATE = 0.001
     MEMORY_SIZE = EPISODE_MAX
-    BATCH_SIZE = 2
+    BATCH_SIZE = 32
     EXPLORATION_MAX = 1.0
     EXPLORATION_MIN = 0.01
     EXPLORATION_DECAY = 0.995
 
     # Env params
-    observation_space = 7
+    observation_space = 10
     # observation_space = env.observation_space
     action_space = 4
 
-    exploration_rate = 0.4#EXPLORATION_MAX
-
-    # Create the model !!!
-    # model = create_model()
+    exploration_rate = 0.6#EXPLORATION_MAX
 
     # Experience replay:
     memory = deque(maxlen=MEMORY_SIZE)
@@ -292,22 +287,6 @@ def dqn_learning_keras_memoryReplay(env, model):
     # Create list for plot and saving
     list_memory_history = []
     list_total_reward = []
-    
-    # Plot
-    # fig = plt.figure()
-    # fig.suptitle("Training in progress", fontsize=22)
-
-    # # Figure 1
-    # ax = fig.add_subplot(211)
-    # [line] = ax.plot(list_total_reward, label='Reward')
-    # ax.title.set_text('Reward')
-    # ax.set_xlabel('Epochs [-]')
-    # ax.set_ylabel('Reward [-]')
-    # # plt.xlim(0, EPISODE_MAX)
-    # # plt.ylim(-150, 100)
-    # ax.legend()
-    # plt.show(False)
-    
     
     episode_max = EPISODE_MAX
 
@@ -318,6 +297,7 @@ def dqn_learning_keras_memoryReplay(env, model):
         total_reward = 0
         j = 0
         state = env.reset()
+        rospy.sleep(2.0)
         # Becarefull with the state (np and list)
         np_state = (np.array(state, dtype=np.float32),)
         np_state = np.reshape(np_state, [1, observation_space])
@@ -383,25 +363,7 @@ def dqn_learning_keras_memoryReplay(env, model):
         print("*********************************************")
         print("*********************************************")
 
-        # # Live plot:
-        # # Plot 2
-        # ax.clear()
-        # string = str('Reward at ' + str(i) + ' epoch')
-        # [line] = ax.plot(list_total_reward, label=string)
-        
-        # ax.title.set_text('Reward')
-        # ax.set_xlabel('Epochs [-]')
-        # ax.set_ylabel('Reward [-]')
-        # # plt.xlim(0, j)
-        # # plt.ylim(-150, 100)
-        # ax.legend()
-        # # plt.pause(0.05)
-        # fig.canvas.draw_idle()
-        # # fig.canvas.draw()
-        # # plt.close(fig)
-        # # plt.show(False)
-
-        if i%20 == 0:
+        if i%50 == 0:
             # Save the model
             print("Saving...")
             # model.save('/home/roboticlab14/catkin_ws/src/envirenement_reinforcement_learning/environment_package/src/saves/model/try_1.h5')
@@ -465,7 +427,7 @@ def create_model():
     EXPLORATION_DECAY = 0.995
 
     # Env params
-    observation_space = 7
+    observation_space = 10
     # observation_space = env.observation_space
     action_space = 4
 
@@ -493,26 +455,27 @@ def use_model(env, model):
     '''
     Use a trained model 
     '''
-    epidodes_max = 2
+    epidodes_max = 5
     demo_step = 10
-    observation_space = 7
+    observation_space = 10
+    done = False
     for i in range(0, epidodes_max):
         j = 0
         state = env.reset()
         np_state = (np.array(state, dtype=np.float32),)
         np_state = np.reshape(np_state, [1, observation_space])
-        for j in range(0, demo_step):
-
+        # for j in range(0, demo_step):
+        while j < demo_step and not done:
             q_values = model.predict(np_state)
             disc_action = discrete_action(np.argmax(q_values[0]))
             new_state, reward, done, info = env.step(disc_action)
-            # print("*********************************************")
-            # print("Observation: ", new_state)
-            # print("Reward: ", reward)
-            # print("Done: ", done)
-            # print("Episode: ", i)
-            # print("Step: ", j)
-            # print("*********************************************")
+            print("*********************************************")
+            print("Observation: ", new_state)
+            print("Reward: ", reward)
+            print("Done: ", done)
+            print("Episode: ", i)
+            print("Step: ", j)
+            print("*********************************************")
             np_new_state = (np.array(new_state, dtype=np.float32),)
             np_new_state = np.reshape(np_new_state, [1, observation_space])
             np_state = np_new_state
@@ -541,18 +504,18 @@ def main():
     # env = init_env()
     # env.reset()
 
-    training = True
+    training = False
     if training:
         # Training using demos
         model = create_model()
         env = init_env()
-        memory = create_demo(env)
-        GAMMA = 0.95
-        model = training_from_demo(model, memory, GAMMA)
+        # memory = create_demo(env)
+        # GAMMA = 0.95
+        # model = training_from_demo(model, memory, GAMMA)
         dqn_learning_keras_memoryReplay(env, model)
     else:
         # Predict model
-        model = load_trained_model("/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position_450/model/try_1.h5")
+        model = load_trained_model("/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/20190716_095200_learn_to_go_position/model/try_1.h5")
         env = init_env()
         use_model(env, model)
 
@@ -560,37 +523,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-
-
-# load_weights only sets the weights of your network. You still need to define its architecture before calling load_weights:
-
-# def create_model():
-#    model = Sequential()
-#    model.add(Dense(64, input_dim=14, init='uniform'))
-#    model.add(LeakyReLU(alpha=0.3))
-#    model.add(BatchNormalization(epsilon=1e-06, mode=0, momentum=0.9, weights=None))
-#    model.add(Dropout(0.5)) 
-#    model.add(Dense(64, init='uniform'))
-#    model.add(LeakyReLU(alpha=0.3))
-#    model.add(BatchNormalization(epsilon=1e-06, mode=0, momentum=0.9, weights=None))
-#    model.add(Dropout(0.5))
-#    model.add(Dense(2, init='uniform'))
-#    model.add(Activation('softmax'))
-#    return model
-
-# def train():
-#    model = create_model()
-#    sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
-#    model.compile(loss='binary_crossentropy', optimizer=sgd)
-
-#    checkpointer = ModelCheckpoint(filepath="/tmp/weights.hdf5", verbose=1, save_best_only=True)
-#    model.fit(X_train, y_train, nb_epoch=20, batch_size=16, show_accuracy=True, validation_split=0.2, verbose=2, callbacks=[checkpointer])
-
-# def load_trained_model(weights_path):
-#    model = create_model()
-#    model.load_weights(weights_path)
-
-
 
