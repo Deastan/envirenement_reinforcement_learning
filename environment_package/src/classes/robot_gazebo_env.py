@@ -63,7 +63,7 @@ class RobotGazeboEnv(gym.Env):
         #Gazebo:
         self.reset_simulation_proxy = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
         self.reset_world_proxy = rospy.ServiceProxy('/gazebo/reset_world', Empty)
-        self.reset_world_or_sim = "NO_RESET" # SIMULATION WORLD NO_RESET
+        self.reset_world_or_sim = "WORLD" # SIMULATION WORLD NO_RESET
         self.unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
         self.pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
 
@@ -174,17 +174,15 @@ class RobotGazeboEnv(gym.Env):
         # self._init_env_variables()
         result = self.random_target_position()
         self.load_stop_controller()
+        self.start_controller()
         self.pause()
         self._reset_sim()
         self.unpause()
         # self.load_start_controller()
-        self.start_controller()
+        # self.start_controller()
         # self.launch.start() # add the node to close the hand
         
-        # Add and delete OBJECT 
-        self.remove_object()
-        # rospy.sleep(0.1)
-        self.spawn_object()
+        
         self._init_pose()
 
         # rospy.sleep(1.5)
@@ -277,6 +275,10 @@ class RobotGazeboEnv(gym.Env):
             print("ERROR: CANNOT RESET GAZEBO!")
         
         # # Add and delete OBJECT 
+        # self.remove_object()
+        # # rospy.sleep(0.1)
+        # self.spawn_object()
+        # Add and delete OBJECT 
         # self.remove_object()
         # # rospy.sleep(0.1)
         # self.spawn_object()
@@ -379,7 +381,7 @@ class RobotGazeboEnv(gym.Env):
                     total_reward += 2.0
                 else:
                     # print("wrong direction")
-                    total_reward -= 1.0
+                    total_reward -= 2.0 # 1.0
 
         # Time punishment
         total_reward -= 1.0

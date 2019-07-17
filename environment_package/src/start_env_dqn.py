@@ -19,11 +19,13 @@ import rospkg
 #REINFORCEMENT LEARNING:
 import matplotlib.pyplot as plt
 import tensorflow as tf
+
 import math
 from collections import deque
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
+from keras.callbacks import TensorBoard
 
 # import our training environment
 # from openai_ros.task_envs.iiwa_tasks import iiwa_move
@@ -51,6 +53,10 @@ from classes.robot_gazebo_env import RobotGazeboEnv
 from tf.transformations import *
 # Global variables:
 here = os.path.dirname(os.path.abspath(__file__))
+
+# Callback function
+# from tensorflow import keras
+tbCallBack = TensorBoard(log_dir='/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/tensorboard', histogram_freq=0, write_graph=True, write_images=True)
 
 def init_env():
     '''
@@ -97,7 +103,7 @@ def discrete_action(action):
     return a
 
 # save the data
-def save(list_theta, epoch, arg_path= 
+def save(list_theta, episode, arg_path= 
         "/home/roboticlab14/catkin_ws/src/envirenement_reinforcement_learning/environment_package/src/saves/pickles/", 
         arg_name = "list_of_reward_"):
     '''
@@ -108,7 +114,7 @@ def save(list_theta, epoch, arg_path=
     try:
         path = arg_path
         name = arg_name
-        full_path = path + name + str(epoch) + ".pkl"
+        full_path = path + name + str(episode) + ".pkl"
         with open(full_path, 'wb') as f:
             pickle.dump(list_theta, f, protocol=pickle.HIGHEST_PROTOCOL)
         saved = True
@@ -139,7 +145,7 @@ def experience_replay(model, memory,
     Train the NN
     '''
     if len(memory) < BATCH_SIZE:
-        return model
+        return model, exploration_rate
     batch = random.sample(memory, BATCH_SIZE)
     # list_q_
     for state, action, reward, new_state, done in batch:
@@ -150,11 +156,42 @@ def experience_replay(model, memory,
 
         q_values = model.predict(state)
         q_values[0][action] = q_target
-        model.fit(state, q_values, verbose=0)#, callbacks=[tensorboard])
+        model.fit(state, q_values, verbose=0, callbacks=[tbCallBack])
 
     exploration_rate *= EXPLORATION_DECAY
+    print("Exploration rate: ", exploration_rate)
     exploration_rate = max(EXPLORATION_MIN, exploration_rate)
-    return model
+    return model, exploration_rate
+
+def experience_replay_v2(model, memory, 
+      BATCH_SIZE, exploration_rate, EXPLORATION_DECAY, EXPLORATION_MIN, GAMMA):
+    '''
+    Train the NN
+    '''
+    if len(memory) < BATCH_SIZE:
+        return model, exploration_rate, 0
+    batch = random.sample(memory, BATCH_SIZE)
+    np_list_states = np.zeros((BATCH_SIZE, 10))
+    np_list_q_values = np.zeros((BATCH_SIZE, 4))
+    i = 0
+    for state, action, reward, new_state, done in batch:
+        if not done:
+            q_target = (reward + GAMMA * np.amax(model.predict(new_state)))
+        else:
+            q_target = reward
+
+        q_values = model.predict(state)
+        q_values[0][action] = q_target
+        np_list_states[i] = state
+        np_list_q_values[i] = q_values[0]
+        i+=1
+    history = model.fit(np_list_states, np_list_q_values,  batch_size=BATCH_SIZE, verbose=0)#, callbacks=[tbCallBack])
+    # print("Loss is: ", history.history)
+    # print(history.history['loss'])
+    exploration_rate *= EXPLORATION_DECAY
+    print("Exploration rate: ", exploration_rate)
+    exploration_rate = max(EXPLORATION_MIN, exploration_rate)
+    return model, exploration_rate, history.history['loss']
 
 def training_from_demo(model, memory_from_demo, GAMMA):
     for state, action, reward, new_state, done in memory_from_demo:
@@ -263,23 +300,23 @@ def dqn_learning_keras_memoryReplay(env, model):
 
     # Time optimzation:
     
-    EPISODE_MAX = 4500
-    MAX_STEPS = 20
+    EPISODE_MAX = 501
+    MAX_STEPS = 15
     #PARAMS
     GAMMA = 0.95
-    LEARNING_RATE = 0.001
     MEMORY_SIZE = EPISODE_MAX
-    BATCH_SIZE = 32
+    BATCH_SIZE = 128
     EXPLORATION_MAX = 1.0
     EXPLORATION_MIN = 0.01
-    EXPLORATION_DECAY = 0.995
+    EXPLORATION_DECAY = 0.9993 # Over 500 =>0.9908, for 2500 =>0.998107
+    # Use exploration_rate = exploration_rate*EXPLORATION_DECAY
+    # exploration decay = 10^(log(0.01)/EPISODE_MAX)
 
     # Env params
     observation_space = 10
-    # observation_space = env.observation_space
     action_space = 4
 
-    exploration_rate = 0.6#EXPLORATION_MAX
+    exploration_rate = EXPLORATION_MAX
 
     # Experience replay:
     memory = deque(maxlen=MEMORY_SIZE)
@@ -287,7 +324,7 @@ def dqn_learning_keras_memoryReplay(env, model):
     # Create list for plot and saving
     list_memory_history = []
     list_total_reward = []
-    
+    list_loss = []
     episode_max = EPISODE_MAX
 
     done = False
@@ -305,6 +342,7 @@ def dqn_learning_keras_memoryReplay(env, model):
         # print(np_state)
         done = False
         list_memory = []
+        
         while j < MAX_STEPS and not done: # step inside an episode
             time_start_step = time.time()
             
@@ -340,15 +378,19 @@ def dqn_learning_keras_memoryReplay(env, model):
             save_forReplay(memory, np_state, action, reward, np_new_state, done)
             print("[ INFO] Time for the saving of experience replay ", j, ": ", time.time()-time_start_save_for_replay)
             time_start_experience_replay = time.time()
-            model = experience_replay(model, memory, 
+            model, exploration_rate_new, loss = experience_replay_v2(model, memory, 
                 BATCH_SIZE, exploration_rate, EXPLORATION_DECAY, EXPLORATION_MIN, GAMMA)
             print("[ INFO] Time for the experience replay ", j, ": ", time.time()-time_start_experience_replay)
             
             list_memory.append([np_state, action, reward, np_new_state, done])
-
+            # Save the lost function into a list
+            if len(memory) > BATCH_SIZE:
+                list_loss.append(loss[0])
+            # print("list_loss: ", list_loss)
             np_state = np_new_state
             state = new_state
             total_reward += reward
+            exploration_rate = exploration_rate_new
             
             print("[ INFO] Time for the step ", j, ": ", time.time()-time_start_step)
             j+=1
@@ -363,7 +405,7 @@ def dqn_learning_keras_memoryReplay(env, model):
         print("*********************************************")
         print("*********************************************")
 
-        if i%50 == 0:
+        if i%20 == 0:
             # Save the model
             print("Saving...")
             # model.save('/home/roboticlab14/catkin_ws/src/envirenement_reinforcement_learning/environment_package/src/saves/model/try_1.h5')
@@ -375,27 +417,9 @@ def dqn_learning_keras_memoryReplay(env, model):
             print("Saving list_memory_history: ", save(list_memory_history, 
                 i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/trajectory/", 
                 arg_name = "list_memory_history_"))
-
-    
-    # plt.show()
-    #Test algo
-    # print("***********Prediction***************")
-    # prediction = True
-    # if prediction == True:
-    #     done = False
-    #     t = 0
-    #     state = env.reset()
-    #     state = np.identity(16)[state:state+1]
-    #     while ((not done) and t < 15):
-    #         #ACTION TO SET
-    #         action = model.predict(state)
-    #         new_state, reward, done, _ = take_action(np.argmax(action), env)
-    #         new_state = np.identity(16)[new_state:new_state+1]         
-    #         env.render()
-    #         state = new_state
-    #         t+=1
-        # print(W1)
-    #end function
+            print("Saving list_loss: ", save(list_loss, 
+                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/losses/", 
+                arg_name = "list_loss_"))
 
 
 # load_weights only sets the weights of your network. You still need to define its architecture before calling load_weights:
@@ -404,7 +428,7 @@ def create_model():
     Create a model with defined parameters
        # Model params
     
-    NN: 7 inputs, 4 outputs
+    NN: 10 inputs, 4 outputs and 2 hidden layers
          ...
     s1 - ... - q_1
     s2 - ... - q_2
@@ -412,30 +436,18 @@ def create_model():
          ... - q_4
          ...
 
-
     '''
 
-    EPISODE_MAX = 600
-    MAX_STEPS = 15
-    #PARAMS
-    GAMMA = 0.95
+    # Leanring params
     LEARNING_RATE = 0.001
-    MEMORY_SIZE = EPISODE_MAX
-    BATCH_SIZE = 20
-    EXPLORATION_MAX = 1.0
-    EXPLORATION_MIN = 0.01
-    EXPLORATION_DECAY = 0.995
 
     # Env params
     observation_space = 10
-    # observation_space = env.observation_space
     action_space = 4
 
-    exploration_rate = EXPLORATION_MAX
-
     model = Sequential()
-    model.add(Dense(16, input_shape=(observation_space,), activation="relu"))
-    model.add(Dense(16, activation="relu"))
+    model.add(Dense(64, input_shape=(observation_space,), activation="relu"))
+    model.add(Dense(64, activation="relu"))
     model.add(Dense(action_space, activation="linear"))
     model.compile(loss="mse", optimizer=Adam(lr=LEARNING_RATE))
 
@@ -504,7 +516,7 @@ def main():
     # env = init_env()
     # env.reset()
 
-    training = False
+    training = True
     if training:
         # Training using demos
         model = create_model()
