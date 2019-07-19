@@ -374,7 +374,7 @@ class RobotGazeboEnv(gym.Env):
             total_reward -= 20
         else:
             if done:
-                total_reward += 100
+                total_reward += 800
             else:
                 if(distance_after_move - distance_before_move < 0): # before change... >
                     # print("right direction")
@@ -382,7 +382,8 @@ class RobotGazeboEnv(gym.Env):
                 else:
                     # print("wrong direction")
                     total_reward -= 2.0 # 1.0
-
+                    total_reward -= distance_after_move*10 # 1.0
+        # print("REWARD: ", distance_after_move )
         # Time punishment
         total_reward -= 1.0
 

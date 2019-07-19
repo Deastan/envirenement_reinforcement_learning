@@ -49,7 +49,7 @@ import termios, tty # for keyboard
 # from openai_ros.task_envs.fetch import fetch_test_task
 # from home.roboticlab14.catkin_ws.src.envirenement_reinforcement_learning.environment_package.env_class.robot_gazebo_env import RobotGazeboEnv
 # from environment_package import robot_gazebo_env
-from classes.robot_gazebo_env import RobotGazeboEnv
+from classes.robot_gazebo_env_pushing import RobotGazeboEnv
 from tf.transformations import *
 # Global variables:
 here = os.path.dirname(os.path.abspath(__file__))
@@ -66,14 +66,14 @@ def init_env():
     # (shortcut: look at openai_ros_common.py and task_envs_list.py)
     timestep_limit_per_episode = 10000000
     register(
-        id="RobotGazeboEnv-v0",
-        entry_point = 'classes.robot_gazebo_env:RobotGazeboEnv',
+        id="RobotGazeboEnv_push-v0",
+        entry_point = 'classes.robot_gazebo_env_pushing:RobotGazeboEnv',
         max_episode_steps=timestep_limit_per_episode,
     )
 
     # Create the Gym environment
-    env = gym.make('RobotGazeboEnv-v0')
-    print("Gym environment done: RobotGazeboEnv-v0")
+    env = gym.make('RobotGazeboEnv_push-v0')
+    print("Gym environment done: RobotGazeboEnvPush-v0")
     return env
 
 def discrete_action(action):
@@ -171,7 +171,7 @@ def experience_replay_v2(model, memory,
     if len(memory) < BATCH_SIZE:
         return model, exploration_rate, 0
     batch = random.sample(memory, BATCH_SIZE)
-    np_list_states = np.zeros((BATCH_SIZE, 10))
+    np_list_states = np.zeros((BATCH_SIZE, 13))
     np_list_q_values = np.zeros((BATCH_SIZE, 4))
     i = 0
     for state, action, reward, new_state, done in batch:
@@ -185,7 +185,7 @@ def experience_replay_v2(model, memory,
         np_list_states[i] = state
         np_list_q_values[i] = q_values[0]
         i+=1
-    history = model.fit(np_list_states, np_list_q_values, epochs=2,  batch_size=BATCH_SIZE, verbose=0)#, callbacks=[tbCallBack])
+    history = model.fit(np_list_states, np_list_q_values, epochs=1, batch_size=BATCH_SIZE, verbose=0)#, callbacks=[tbCallBack])
     # print("Loss is: ", history.history)
     # print(history.history['loss'])
     exploration_rate *= EXPLORATION_DECAY
@@ -301,11 +301,11 @@ def dqn_learning_keras_memoryReplay(env, model):
     # Time optimzation:
     
     EPISODE_MAX = 601
-    MAX_STEPS = 40
+    MAX_STEPS = 10
     #PARAMS
     GAMMA = 0.95
     MEMORY_SIZE = EPISODE_MAX
-    BATCH_SIZE = 128
+    BATCH_SIZE = 2
     EXPLORATION_MAX = 1.0
     EXPLORATION_MIN = 0.01
     EXPLORATION_DECAY = 0.999790 #0.9993 # Over 500 =>0.9908, for 2500 =>0.998107
@@ -313,7 +313,7 @@ def dqn_learning_keras_memoryReplay(env, model):
     # exploration decay = 10^(log(0.01)/EPISODE_MAX)
 
     # Env params
-    observation_space = 10
+    observation_space = 13
     action_space = 4
 
     exploration_rate = EXPLORATION_MAX
@@ -335,7 +335,7 @@ def dqn_learning_keras_memoryReplay(env, model):
         total_reward = 0
         j = 0
         state = env.reset()
-        rospy.sleep(2.0)
+        rospy.sleep(6.50) #wait on random thing.
         # Becarefull with the state (np and list)
         np_state = (np.array(state, dtype=np.float32),)
         np_state = np.reshape(np_state, [1, observation_space])
@@ -410,24 +410,24 @@ def dqn_learning_keras_memoryReplay(env, model):
             # Save the model
             print("Saving...")
             # model.save('/home/roboticlab14/catkin_ws/src/envirenement_reinforcement_learning/environment_package/src/saves/model/try_1.h5')
-            model.save('/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/model/try_1.h5')
+            model.save('/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas_push/learn_to_push/model/try_1.h5')
             # Save datas
             print("Saving list_total_reward: ", save(list_total_reward, i, 
-                arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/reward/", 
+                arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas_push/learn_to_push/reward/", 
                 arg_name="list_total_reward_"))
             print("Saving list_memory_history: ", save(list_memory_history, 
-                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/trajectory/", 
+                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas_push/learn_to_push/trajectory/", 
                 arg_name = "list_memory_history_"))
             print("Saving list_done: ", save(list_done, 
-                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/done/", 
+                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas_push/learn_to_push/done/", 
                 arg_name = "list_done_"))
             print("Saving list_loss: ", save(list_loss, 
-                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/losses/", 
+                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas_push/learn_to_push/losses/", 
                 arg_name = "list_loss_"))
             # Save the memory!
             
             print("Saving memory: ", save(memory, 
-                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/memory/", 
+                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas_push/learn_to_push/memory/", 
                 arg_name = "memory_"))
 
 
@@ -451,7 +451,7 @@ def create_model():
     LEARNING_RATE = 0.001
 
     # Env params
-    observation_space = 10
+    observation_space = 13
     action_space = 4
 
     model = Sequential()

@@ -1,0 +1,6 @@
+<launch>
+    
+    <!-- <node pkg="environment_package" name="start_env" type="start_env.py" output="screen" ns="/iiwa" /> -->
+    <node pkg="environment_package" name="start_env" type="start_env_dqn_pushing.py" output="screen" ns="/iiwa" />
+
+</launch>
