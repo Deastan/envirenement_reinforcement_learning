@@ -78,6 +78,11 @@ class RobotGazeboEnv(gym.Env):
         moveit_commander.roscpp_initialize(sys.argv)
         self.robot = moveit_commander.RobotCommander()
         self.scene = moveit_commander.PlanningSceneInterface()
+        
+
+        # Form the motion planning request
+        # req = MotionPlanRequest()
+        
         self.group_name = "manipulator"
         self.group = moveit_commander.MoveGroupCommander(self.group_name)
         self.group.set_planner_id("RRTkConfigDefault")
@@ -89,7 +94,7 @@ class RobotGazeboEnv(gym.Env):
         # Action space
         # +x, -x, +y, -y, +z. z 
         # self.n_actions = 6 # real one
-        self.n_actions = 4
+        self.n_actions = 6
         self.action_space = spaces.Discrete(self.n_actions)
         # self.action_space = spaces.multi_discrete([5, 2, 2])
 
@@ -107,7 +112,7 @@ class RobotGazeboEnv(gym.Env):
         self.current_pose = []
         self.current_observation = []
 
-        # TARGET TODO: PARAMETERS LIST
+        # TARGET
         target_x = 0.5#0.0#0.5
         target_y = -0.5#0.5
         target_z = 0.10#0.5
@@ -116,57 +121,10 @@ class RobotGazeboEnv(gym.Env):
         self.target_position.append(target_y)
         self.target_position.append(target_z)
 
-        # OBJECTS:
-        ee_x = 0.5#0.0#0.5
-        ee_y = -0.5#0.5
-        ee_z = 0.10#0.5
-        self.ee_position = []
-        self.ee_position.append(ee_x)
-        self.ee_position.append(ee_y)
-        self.ee_position.append(ee_z)
-
-        # OBJECTS:
-        object_x = 0.5#0.0#0.5
-        object_y = -0.5#0.5
-        object_z = 0.10#0.5
-        self.object_position = []
-        self.object_position.append(object_x)
-        self.object_position.append(object_y)
-        self.object_position.append(object_z)
-
-        # "Last" position of the object
-        # self.last_object_position = [] TODO: CAN BE USEFUL TO ADD
-        self.last_object_position = []
-        self.last_object_position.append(self.object_position[0])
-        self.last_object_position.append(self.object_position[1])
-        self.last_object_position.append(self.object_position[2])
-
-        # Current position of the object:
-        self.current_object_position = []
-        self.current_object_position.append(self.object_position[0])
-        self.current_object_position.append(self.object_position[1])
-        self.current_object_position.append(self.object_position[2])
-
-
-        self.result_target = False
-        self.result_object_pose = False
-        self.result_ee_position = False
-        self.init_pose_bool = False
-        self.listener = rospy.Subscriber("/gazebo/object_to_push_link", Pose, self.callback)
-
-        #finger:
-        # /reflex_takktile_2/proximal_joint_1_position_controller/command
-        self.pub_finger_1 = rospy.Publisher('/reflex_takktile_2/proximal_joint_1_position_controller/command', Float64, queue_size=10)
-        self.msg_finger = Float64()
-        self.msg_finger.data = 1.57
-        self.pub_finger_1.publish(self.msg_finger)
-
-
-        #didn't work...yet
         self.continuous = False # waiting on a result
 
         # Reward
-        self.out_workspace = False #works!
+        self.out_workspace = False
 
         # create env..
 
@@ -212,21 +170,9 @@ class RobotGazeboEnv(gym.Env):
         Returns: 
             observation (object): the initial observation.
         """
-        print("[ WARNING]: RESETING...")
+        
         # self._init_env_variables()
-        self.result_target = self.random_target_position()
-        self.result_object_pose = self.random_object_position()
-        self.result_ee_position = self.random_ee_position()
-        while ((self.result_ee_position == False)):
-            print("ee_position: ", self.result_ee_position, ", object: ", self.result_object_pose, ", target: ", self.result_target)
-            rospy.sleep(0.01)
-        while ((self.result_object_pose == False)):
-            print("ee_position: ", self.result_ee_position, ", object: ", self.result_object_pose, ", target: ", self.result_target)
-            rospy.sleep(0.01)
-        while ((self.result_target == False)):
-            print("ee_position: ", self.result_ee_position, ", object: ", self.result_object_pose, ", target: ", self.result_target)
-            rospy.sleep(0.01)
-
+        result = self.random_target_position()
         self.load_stop_controller()
         self.start_controller()
         self.pause()
@@ -237,22 +183,7 @@ class RobotGazeboEnv(gym.Env):
         # self.launch.start() # add the node to close the hand
         
         
-        self.init_pose_bool = self._init_pose()
-        j = 0
-        while self.init_pose_bool == False:
-            j+=1
-            rospy.sleep(0.01)
-            print("wating")
-            if j > 500:
-                self.init_pose_bool = True
-
-        
-        self.result_ee_position = False
-        self.result_object_pose = False
-        self.result_target = False
-        self.init_pose_bool = False
-
-        self._init_env_variables()
+        self._init_pose()
 
         # rospy.sleep(1.5)
         # init_action = [0.6, 0.1, self.constant_z, 3.1457, 0.0, 0.0]
@@ -312,30 +243,18 @@ class RobotGazeboEnv(gym.Env):
         if(self.bool_init_joint_or_pose == True):
             init_joint = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             # init_joint = [0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 0.0]
-            result = self.set_joints_execute(init_joint)
+            self.set_joints_execute(init_joint)
         else:
-            init_action = [self.ee_position[0], self.ee_position[1], self.ee_position[2], 3.1457, 0.0, 0.0]
-            result = self.set_endEffector_pose(init_action)
-            current_pose = self.get_endEffector_pose()
-            # .x, self.get_endEffector_pose.position.y, self.get_endEffector_pose.position.z]
-            while 0.05<self.distance_between_vectors([self.ee_position[0], self.ee_position[1], self.ee_position[2]],[current_pose.pose.position.x, current_pose.pose.position.y, current_pose.pose.position.z]):
-                rospy.sleep(0.01)
-                self.random_ee_position()
-                init_action = [self.ee_position[0], self.ee_position[1], self.ee_position[2], 3.1457, 0.0, 0.0]
-                print("Init action: ", init_action)
-                result = self.set_endEffector_pose(init_action)
-                current_pose = self.get_endEffector_pose()
-        #Republish to be sure we stay with the finger at the right position
-        self.pub_finger_1.publish(self.msg_finger)
-        # self._init_env_variables()
-        return result
+            init_action = [0.6, 0.1, self.constant_z, 3.1457, 0.0, 0.0]
+            self.set_endEffector_pose(init_action)
+        self._init_env_variables()
+        return True
 
     def _init_env_variables(self):
         # print("Var = 0")
         # self.step_circle = 0
         self.last_pose = self.get_endEffector_pose().pose
         self.current_pose = self.last_pose
-        self.current_observation = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, self.object_position[0], self.object_position[1], self.object_position[2]]
         
         return True
 
@@ -360,9 +279,9 @@ class RobotGazeboEnv(gym.Env):
         # # rospy.sleep(0.1)
         # self.spawn_object()
         # Add and delete OBJECT 
-        self.remove_object()
-        # rospy.sleep(0.1)
-        self.spawn_object()
+        # self.remove_object()
+        # # rospy.sleep(0.1)
+        # self.spawn_object()
 
         # Robot REMOVE AND SPAWN ********************************
         # self.remove_robot()
@@ -387,10 +306,8 @@ class RobotGazeboEnv(gym.Env):
         Position of the target 
         
         """
-        # print("Position of the object are: ", self.current_object_position)
         # rospy.logdebug("Start Get Observation ==>")
         self.last_pose = self.current_pose
-        
         # print(self.current_pose.pose)
 
         last_observation = []     
@@ -405,10 +322,6 @@ class RobotGazeboEnv(gym.Env):
         last_observation.append(self.target_position[0])
         last_observation.append(self.target_position[1])
         last_observation.append(self.target_position[2])
-        # Add observation of the object
-        last_observation.append(self.last_object_position[0])
-        last_observation.append(self.last_object_position[1])
-        last_observation.append(self.last_object_position[2])
 
         self.last_observation = last_observation
         
@@ -428,16 +341,8 @@ class RobotGazeboEnv(gym.Env):
         observation.append(self.target_position[1])
         observation.append(self.target_position[2])
 
-        # Add position of the object
-        # try:
-        observation.append(self.current_object_position[0])
-        observation.append(self.current_object_position[1])
-        observation.append(self.current_object_position[2])
-        
-
         # Update observation 
         self.current_observation = observation
-        self.last_object_position = self.current_object_position
         return observation
 
     def _compute_reward(self, observations, done):
@@ -448,51 +353,36 @@ class RobotGazeboEnv(gym.Env):
         # The sign depend on its function.
         total_reward = 0
         
-        # # create and update from last position
-        # last_position = []
-        # last_position.append(self.last_pose.position.x)
-        # last_position.append(self.last_pose.position.y)
-        # last_position.append(self.last_pose.position.z)
+        # create and update from last position
+        last_position = []
+        last_position.append(self.last_pose.position.x)
+        last_position.append(self.last_pose.position.y)
+        last_position.append(self.last_pose.position.z)
 
-        # # create and update current position
-        # current_position = []
-        # current_position.append(self.current_pose.position.x)
-        # current_position.append(self.current_pose.position.y)
-        # current_position.append(self.current_pose.position.z)
-
-        # # create the distance btw the two last vector
-        # distance_before_move = self.distance_between_vectors(last_position, self.target_position)
-        # distance_after_move = self.distance_between_vectors(current_position, self.target_position)
-
-        last_object_position = [self.last_observation[10], self.last_observation[11], self.last_observation[12]]
-        current_object_position = [self.current_observation[10], self.current_observation[11], self.current_observation[12]]
+        # create and update current position
+        current_position = []
+        current_position.append(self.current_pose.position.x)
+        current_position.append(self.current_pose.position.y)
+        current_position.append(self.current_pose.position.z)
 
         # create the distance btw the two last vector
-        distance_before_move = self.distance_between_vectors(last_object_position, self.target_position)
-        distance_after_move = self.distance_between_vectors(current_object_position, self.target_position)
+        distance_before_move = self.distance_between_vectors(last_position, self.target_position)
+        distance_after_move = self.distance_between_vectors(current_position, self.target_position)
         
         # Give the reward
         if self.out_workspace:
             total_reward -= 20
         else:
             if done:
-                total_reward += 1500
+                total_reward += 800
             else:
-                print("Distance object to target: ", distance_after_move - distance_before_move)
                 if(distance_after_move - distance_before_move < 0): # before change... >
                     # print("right direction")
-                    total_reward += 2
-                    total_reward += (1*distance_after_move)
-                #if object didnt move.. bad reward
-                elif (abs(distance_after_move - distance_before_move) < 0.001):
-                    total_reward -= 15.0
-                    
+                    total_reward += 2.0
                 else:
                     # print("wrong direction")
                     total_reward -= 2.0 # 1.0
-                    total_reward -= (1*distance_after_move*8) # 1.0
-                    
-                    
+                    total_reward -= distance_after_move*10 # 1.0
         # print("REWARD: ", distance_after_move )
         # Time punishment
         total_reward -= 1.0
@@ -502,21 +392,17 @@ class RobotGazeboEnv(gym.Env):
     # Check if the goal is reached or not
     def _is_done(self, observations):
         """
-        Check if the episode is done => when the object has reached the goal
-
-        Output: True i when the episode is done
-                False otherwise
         
         """
 
         done = False
         vector_observ_pose = []
-        vector_observ_pose.append(observations[10])
-        vector_observ_pose.append(observations[11])
-        vector_observ_pose.append(observations[12])
+        vector_observ_pose.append(observations[0])
+        vector_observ_pose.append(observations[1])
+        vector_observ_pose.append(observations[2])
 
         # Check if the hand effector is close to the target in cm!
-        if self.distance_between_vectors(vector_observ_pose, self.target_position) < 0.3:
+        if self.distance_between_vectors(vector_observ_pose, self.target_position) < 0.1:
             done = True
 
         return done
@@ -568,11 +454,6 @@ class RobotGazeboEnv(gym.Env):
         return result
 
     def get_endEffector_pose(self):
-        '''
-        Get pose of the end effector
-
-        Output:
-        '''
         start_time = time.time()
         endEffector_pose = self.group.get_current_pose()
         # stop_time = time.time()
@@ -619,7 +500,7 @@ class RobotGazeboEnv(gym.Env):
         pose_goal = geometry_msgs.msg.Pose()
         pose_goal.position.x = current_pose.position.x + action[0]
         pose_goal.position.y = current_pose.position.y + action[1]
-        pose_goal.position.z = self.constant_z #current_pose.position.z + action[2]
+        pose_goal.position.z = current_pose.position.z + action[2] #self.constant_z #
         # q_interm = quaternion_multiply(q_rot, q_interm)
         pose_goal.orientation.x = q_interm[0]
         pose_goal.orientation.y = q_interm[1]
@@ -696,11 +577,11 @@ class RobotGazeboEnv(gym.Env):
         self.group.clear_pose_targets()
         time_start_execute_endEffector_pose_clear = time.time()
 
-        # print("[ INFO] Time for plan: ", time_start_execute_endEffector_pose_plan-time_start_execute_endEffector_pose)
-        # print("[ INFO] Time for go: ", time_start_execute_endEffector_pose_go-time_start_execute_endEffector_pose_plan)
-        # print("[ INFO] Time for: Stop: ", time_start_execute_endEffector_pose_stop-time_start_execute_endEffector_pose_go)
-        # print("[ INFO] Time for: Clear: ", time_start_execute_endEffector_pose_clear-time_start_execute_endEffector_pose_stop)
-        # print("[ INFO] Time for the time_start_execute_endEffector_pose: ", time.time()-time_start_execute_endEffector_pose)
+        print("[ INFO] Time for plan: ", time_start_execute_endEffector_pose_plan-time_start_execute_endEffector_pose)
+        print("[ INFO] Time for go: ", time_start_execute_endEffector_pose_go-time_start_execute_endEffector_pose_plan)
+        print("[ INFO] Time for: Stop: ", time_start_execute_endEffector_pose_stop-time_start_execute_endEffector_pose_go)
+        print("[ INFO] Time for: Clear: ", time_start_execute_endEffector_pose_clear-time_start_execute_endEffector_pose_stop)
+        print("[ INFO] Time for the time_start_execute_endEffector_pose: ", time.time()-time_start_execute_endEffector_pose)
         return result
 
     def set_joints_execute(self, joints_angle):
@@ -755,25 +636,19 @@ class RobotGazeboEnv(gym.Env):
         orientation = [0.0, 0.0, 0.0]
         quaternion = tft.quaternion_from_euler(orientation[0], orientation[1], orientation[2])
         object_pose = Pose()
-        object_pose.position.x = float(self.object_position[0])
-        object_pose.position.y = float(self.object_position[1])
-        object_pose.position.z = float(self.object_position[2])
+        object_pose.position.x = float(self.target_position[0])
+        object_pose.position.y = float(self.target_position[1])
+        object_pose.position.z = float(0.5)
         object_pose.orientation.x = quaternion[0]
         object_pose.orientation.y = quaternion[1]
         object_pose.orientation.z = quaternion[2]
         object_pose.orientation.w = quaternion[3]
-
-        # Create object using XACRO
-        file_localition = roslib.packages.get_pkg_dir('reflex_description') + '/urdf/object_to_catch.xacro'
-        p = os.popen("rosrun xacro xacro.py " + file_localition)
-        xml_string = p.read()
-        p.close()
+        # Create object
+        file_localition = roslib.packages.get_pkg_dir('reflex_description') + '/urdf/object_to_catch.urdf'
+        rospy.wait_for_service("/gazebo/spawn_urdf_model")
         srv_spawn_model = rospy.ServiceProxy('/gazebo/spawn_urdf_model', SpawnModel)
-
-        # rospy.wait_for_service("/gazebo/spawn_urdf_model")
-        # srv_spawn_model = rospy.ServiceProxy('/gazebo/spawn_urdf_model', SpawnModel)
-        # file_xml = open(file_localition)
-        # xml_string=file_xml.read()
+        file_xml = open(file_localition)
+        xml_string=file_xml.read()
         # spawn new model
         req = SpawnModelRequest()
         req.model_name = name # model name from command line input
@@ -781,20 +656,6 @@ class RobotGazeboEnv(gym.Env):
         req.initial_pose = object_pose
         
         res = srv_spawn_model(req)
-
-        # # Create object using urdf
-        # file_localition = roslib.packages.get_pkg_dir('reflex_description') + '/urdf/object_to_catch.urdf'
-        # rospy.wait_for_service("/gazebo/spawn_urdf_model")
-        # srv_spawn_model = rospy.ServiceProxy('/gazebo/spawn_urdf_model', SpawnModel)
-        # file_xml = open(file_localition)
-        # xml_string=file_xml.read()
-        # # spawn new model
-        # req = SpawnModelRequest()
-        # req.model_name = name # model name from command line input
-        # req.model_xml = xml_string
-        # req.initial_pose = object_pose
-        
-        # res = srv_spawn_model(req)
 
     def remove_object(self):
         '''
@@ -972,95 +833,31 @@ class RobotGazeboEnv(gym.Env):
         # self.check_workspace(pose)
         result = False
         object_pose = Pose()
-
+        # print(random.uniform(-1, 1))
+        # print(random.uniform(-1, 1))
+        # print(random.uniform(-1, 1))
+        # print(random.uniform(-1, 1))
+        # print(random.uniform(-1, 1))
+        # print(random.uniform(-1, 1))
+        # print(random.uniform(-1, 1))
         while result==False:
             object_pose.position.x = random.uniform(0.4, 0.7)
             object_pose.position.y = random.uniform(-0.6, 0.6)
-            object_pose.position.z = 0.1
-            
+            object_pose.position.z = random.uniform(0.1, 1.2)
+            # print("Target is: (", object_pose.position.x, ", ", object_pose.position.y, ", ", object_pose.position.z, ")")
             result = self.check_workspace(object_pose)
-     
+        # x_min = 
+        # y_min =
+        # z_min =
+        # x_max =
+        # y_max =
+        # z_max =
+        # random.uniform(a, b)
+        # print("Target is: (", object_pose.position.x, ", ", object_pose.position.y, ", ", object_pose.position.z, ")")
         self.target_position[0] = object_pose.position.x
         self.target_position[1] = object_pose.position.y
         self.target_position[2] = object_pose.position.z
 
         return result
-
-    def random_object_position(self):
-        # Workspace
-        # self.check_workspace(pose)
-        result = False
-        object_pose = Pose()
-
-        while result==False:
-            object_pose.position.x = random.uniform(0.3, 0.6)
-            object_pose.position.y = random.uniform(-0.6, 0.6)
-            object_pose.position.z = 0.1
-            
-            result = self.check_workspace(object_pose)
-     
-        self.object_position[0] = object_pose.position.x
-        self.object_position[1] = object_pose.position.y
-        self.object_position[2] = object_pose.position.z
-
-        return result
-
-    def random_ee_position(self):
-        # Workspace
-        # self.check_workspace(pose)
-        result = False
-        object_pose = Pose()
-
-        while result == False:
-            object_pose.position.x = random.uniform(0.3, 0.8)
-            object_pose.position.y = random.uniform(-0.8, 0.8)
-            object_pose.position.z = 0.1
-
-            
-            # Check that the ee are not going in the object...
-            if ((((self.object_position[0]-object_pose.position.x)*(self.object_position[0]-object_pose.position.x) + 
-            (self.object_position[1]-object_pose.position.y)*(self.object_position[1]-object_pose.position.y)) > 0.20*0.20) and 
-            (((self.object_position[0]-object_pose.position.x)*(self.object_position[0]-object_pose.position.x) + 
-            (self.object_position[1]-object_pose.position.y)*(self.object_position[1]-object_pose.position.y)) < 0.30*0.30)):
-                # print("LOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOPPPPPPPPPPPP")
-                # print("True")
-                result = True
-            else:
-                # print("False")
-                result = False
-            
-            
-            # if self.check_workspace(object_pose) == True:
-            #     # Check that the ee are not going in the object...
-            #     if ((((self.object_position[0]-object_pose.position.x)*(self.object_position[0]-object_pose.position.x) + 
-            #     (self.object_position[1]-object_pose.position.y)*(self.object_position[1]-object_pose.position.y)) < 0.15*0.15) and 
-            #     (((self.object_position[0]-object_pose.position.x)*(self.object_position[0]-object_pose.position.x) + 
-            #     (self.object_position[1]-object_pose.position.y)*(self.object_position[1]-object_pose.position.y)) > 0.25*0.25)):
-            #         # print("LOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOPPPPPPPPPPPP")
-            #         result = False
-            #     else:
-            #         result = True
-
-     
-        self.ee_position[0] = object_pose.position.x
-        self.ee_position[1] = object_pose.position.y
-        self.ee_position[2] = object_pose.position.z
-
-        return result
-
-
-    def callback(self, msg):
-        '''
-        Save the new position of the object
-        '''
-        # Issue when it is filling the matrix and an other function try to get the values.
-        # A possible failure is when the vector is filled and the values will be not get for the right time!
-        # self.current_object_position = []
-        # self.current_object_position.append(msg.position.x)
-        # self.current_object_position.append(msg.position.y)
-        # self.current_object_position.append(msg.position.z)
-        self.current_object_position[0] = msg.position.x
-        self.current_object_position[1] = msg.position.y
-        self.current_object_position[2] = msg.position.z
 
 

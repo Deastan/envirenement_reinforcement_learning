@@ -87,7 +87,7 @@ def discrete_action(action):
     5 = - step_size * z
     '''
     a = [0, 0, 0, 0, 0, 0]
-    step_size = 0.025
+    step_size = 0.05
     if action == 0:
         a[action] = step_size
     elif action == 1:
@@ -300,15 +300,15 @@ def dqn_learning_keras_memoryReplay(env, model):
 
     # Time optimzation:
     
-    EPISODE_MAX = 601
-    MAX_STEPS = 10
+    EPISODE_MAX = 300
+    MAX_STEPS = 40
     #PARAMS
     GAMMA = 0.95
     MEMORY_SIZE = EPISODE_MAX
     BATCH_SIZE = 2
     EXPLORATION_MAX = 1.0
     EXPLORATION_MIN = 0.01
-    EXPLORATION_DECAY = 0.999790 #0.9993 # Over 500 =>0.9908, for 2500 =>0.998107
+    EXPLORATION_DECAY = 0.99961 #0.9993 # Over 500 =>0.9908, for 2500 =>0.998107
     # Use exploration_rate = exploration_rate*EXPLORATION_DECAY
     # exploration decay = 10^(log(0.01)/EPISODE_MAX)
 
@@ -335,7 +335,7 @@ def dqn_learning_keras_memoryReplay(env, model):
         total_reward = 0
         j = 0
         state = env.reset()
-        rospy.sleep(6.50) #wait on random thing.
+        # rospy.sleep(6.50) #wait on random thing.
         # Becarefull with the state (np and list)
         np_state = (np.array(state, dtype=np.float32),)
         np_state = np.reshape(np_state, [1, observation_space])

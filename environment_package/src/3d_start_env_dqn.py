@@ -67,7 +67,7 @@ def init_env():
     timestep_limit_per_episode = 10000000
     register(
         id="RobotGazeboEnv-v0",
-        entry_point = 'classes.robot_gazebo_env:RobotGazeboEnv',
+        entry_point = 'classes.robot_gazebo_env_3d:RobotGazeboEnv',
         max_episode_steps=timestep_limit_per_episode,
     )
 
@@ -172,7 +172,7 @@ def experience_replay_v2(model, memory,
         return model, exploration_rate, 0
     batch = random.sample(memory, BATCH_SIZE)
     np_list_states = np.zeros((BATCH_SIZE, 10))
-    np_list_q_values = np.zeros((BATCH_SIZE, 4))
+    np_list_q_values = np.zeros((BATCH_SIZE, 6))
     i = 0
     for state, action, reward, new_state, done in batch:
         if not done:
@@ -185,7 +185,7 @@ def experience_replay_v2(model, memory,
         np_list_states[i] = state
         np_list_q_values[i] = q_values[0]
         i+=1
-    history = model.fit(np_list_states, np_list_q_values, epochs=2,  batch_size=BATCH_SIZE, verbose=0)#, callbacks=[tbCallBack])
+    history = model.fit(np_list_states, np_list_q_values, epochs=1,  batch_size=BATCH_SIZE, verbose=0)#, callbacks=[tbCallBack])
     # print("Loss is: ", history.history)
     # print(history.history['loss'])
     exploration_rate *= EXPLORATION_DECAY
@@ -300,21 +300,21 @@ def dqn_learning_keras_memoryReplay(env, model):
 
     # Time optimzation:
     
-    EPISODE_MAX = 1201
+    EPISODE_MAX = 601
     MAX_STEPS = 40
     #PARAMS
     GAMMA = 0.95
-    MEMORY_SIZE = EPISODE_MAX*10
+    MEMORY_SIZE = EPISODE_MAX
     BATCH_SIZE = 128
     EXPLORATION_MAX = 1.0
     EXPLORATION_MIN = 0.01
-    EXPLORATION_DECAY = 0.999790 #0.9993 # Over 500 =>0.9908, for 2500 =>0.998107
+    EXPLORATION_DECAY = 0.999910 #0.9993 # Over 500 =>0.9908, for 2500 =>0.998107
     # Use exploration_rate = exploration_rate*EXPLORATION_DECAY
     # exploration decay = 10^(log(0.01)/EPISODE_MAX)
 
     # Env params
     observation_space = 10
-    action_space = 4
+    action_space = 6
 
     exploration_rate = EXPLORATION_MAX
 
@@ -452,7 +452,7 @@ def create_model():
 
     # Env params
     observation_space = 10
-    action_space = 4
+    action_space = 6
 
     model = Sequential()
     model.add(Dense(64, input_shape=(observation_space,), activation="relu"))
