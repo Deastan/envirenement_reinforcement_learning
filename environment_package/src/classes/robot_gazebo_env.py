@@ -121,6 +121,11 @@ class RobotGazeboEnv(gym.Env):
         self.target_position.append(target_y)
         self.target_position.append(target_z)
 
+        # MODE
+        # Default is training
+        # Training, Predicting, Evaluating
+        self.env_mode = "Training"
+
         self.continuous = False # waiting on a result
 
         # Reward
@@ -170,9 +175,14 @@ class RobotGazeboEnv(gym.Env):
         Returns: 
             observation (object): the initial observation.
         """
-        
-        # self._init_env_variables()
-        result = self.random_target_position()
+        if self.env_mode == "training":
+            # self._init_env_variables()
+            result = self.random_target_position()
+        elif self.env_mode == "predicting":
+            result = self.random_target_position()
+        elif self.env_mode == "evaluating":
+            print("[ Info]: env mode: evaluating")
+            
         self.load_stop_controller()
         self.start_controller()
         self.pause()
@@ -860,4 +870,31 @@ class RobotGazeboEnv(gym.Env):
 
         return result
 
+    def set_for_evaluation(self, target_point):
+        '''
+        Set the target for the end effector allowing to evaluate our model
 
+        input: vector 3D 
+
+        '''
+        for i in range(3):
+            self.target_position[i] = target_point[i]
+
+    def set_mode(self, mode="training"):
+        '''
+        Change the environment in training mode, predicting, evaluating
+        (Change the initatilisation part mainly)
+        Default: training
+        training 
+        predicting
+        evaluating
+
+
+        return the new setting
+        '''
+        if mode == "training" or mode == "predicting" or mode == "evaluating":
+            self.env_mode = mode
+        else:
+            self.env_mode = "training"
+
+        return self.env_mode
