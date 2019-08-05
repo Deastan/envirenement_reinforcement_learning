@@ -1,6 +1,7 @@
 #!/usr/bin/env python2
 
-import sys
+import utils
+import datetime
 # if sys.version_info[0] < 3:
 #         raise Exception("Must be using Python 3 on ROS")
 
@@ -76,7 +77,7 @@ def init_env():
     print("Gym environment done: RobotGazeboEnv-v0")
     return env
 
-def discrete_action(action):
+def discrete_action(action, step_size = 0.01):
     '''
     Transform the asking action to a discretize action to simplify the problem 
     0 = + step_size * x
@@ -87,7 +88,6 @@ def discrete_action(action):
     5 = - step_size * z
     '''
     a = [0, 0, 0, 0, 0, 0]
-    step_size = 0.1
     if action == 0:
         a[action] = step_size
     elif action == 1:
@@ -102,8 +102,27 @@ def discrete_action(action):
         a[2] = -step_size
     return a
 
+def action_to_string(action):
+    '''
+    Transform an action to a string to be more explicite about what is the direction
+    '''
+    string_action = ""
+    if action == 0:
+        string_action = "down"
+    elif action == 1:
+        string_action = "up"
+    elif action == 2:
+        string_action = "right"
+    elif action == 3:
+        string_action = "left"
+    elif action == 4:
+        string_action = "up in Z"
+    elif action == 5:
+        string_action = "down in Z"
+    return string_action
+
 # save the data
-def save(list_theta, episode, arg_path= 
+def save(list_theta, episode=None, arg_path= 
         "/home/roboticlab14/catkin_ws/src/envirenement_reinforcement_learning/environment_package/src/saves/pickles/", 
         arg_name = "list_of_reward_"):
     '''
@@ -114,7 +133,10 @@ def save(list_theta, episode, arg_path=
     try:
         path = arg_path
         name = arg_name
-        full_path = path + name + str(episode) + ".pkl"
+        if episode == None:
+            full_path = path + name + ".pkl"
+        else:
+            full_path = path + name + str(episode) + ".pkl"
         with open(full_path, 'wb') as f:
             pickle.dump(list_theta, f, protocol=pickle.HIGHEST_PROTOCOL)
         saved = True
@@ -193,6 +215,21 @@ def experience_replay_v2(model, memory,
     exploration_rate = max(EXPLORATION_MIN, exploration_rate)
     return model, exploration_rate, history.history['loss']
 
+def experience_evaluating(model, state, action, reward, new_state, done, GAMMA):
+
+    if not done:
+        q_target = (reward + GAMMA * np.amax(model.predict(new_state)))
+    else:
+        q_target = reward
+
+    q_values = model.predict(state)
+    q_values[0][action] = q_target
+    
+    history = model.evaluate(state, q_values, verbose=0)
+
+    print("Loss is: ", history)
+    return history
+
 def training_from_demo(model, memory_from_demo, GAMMA):
     for state, action, reward, new_state, done in memory_from_demo:
         if not done:
@@ -245,7 +282,7 @@ def create_demo(env):
 
             
             
-            disc_action = discrete_action(action[j])
+            disc_action = discrete_action(action[j],step_size = 0.05)
             new_state, reward, done, info = env.step(disc_action)
             print("*********************************************")
             print("Observation: ", new_state)
@@ -270,10 +307,8 @@ def create_demo(env):
         np_state = (np.array(state, dtype=np.float32),)
         np_state = np.reshape(np_state, [1, observation_space])
         for j in range(0, demo_step):
-
             
-            
-            disc_action = discrete_action(action[j])
+            disc_action = discrete_action(action[j], step_size = 0.05)
             new_state, reward, done, info = env.step(disc_action)
             print("*********************************************")
             print("Observation: ", new_state)
@@ -293,31 +328,13 @@ def create_demo(env):
     return memory_from_demo
 
 # Neural network with 2 hidden layer using Keras + experience replay
-def dqn_learning_keras_memoryReplay(env, model):
+def dqn_learning_keras_memoryReplay(env, model, folder_path, EPISODE_MAX, MAX_STEPS, GAMMA,MEMORY_SIZE, BATCH_SIZE, EXPLORATION_MAX, EXPLORATION_MIN, EXPLORATION_DECAY, observation_space, action_space, step_size):
     '''
     function which is a neural net using Keras with memory replay
     '''
 
-    # Time optimzation:
-    
-    EPISODE_MAX = 1201
-    MAX_STEPS = 40
-    #PARAMS
-    GAMMA = 0.95
-    MEMORY_SIZE = EPISODE_MAX*10
-    BATCH_SIZE = 128
-    EXPLORATION_MAX = 1.0
-    EXPLORATION_MIN = 0.01
-    EXPLORATION_DECAY = 0.999790 #0.9993 # Over 500 =>0.9908, for 2500 =>0.998107
-    # Use exploration_rate = exploration_rate*EXPLORATION_DECAY
-    # exploration decay = 10^(log(0.01)/EPISODE_MAX)
-
-    # Env params
-    observation_space = 10
-    action_space = 4
-
+    # Initializations:
     exploration_rate = EXPLORATION_MAX
-
     # Experience replay:
     memory = deque(maxlen=MEMORY_SIZE)
 
@@ -335,7 +352,7 @@ def dqn_learning_keras_memoryReplay(env, model):
         total_reward = 0
         j = 0
         state = env.reset()
-        rospy.sleep(2.0)
+        rospy.sleep(5.0)
         # Becarefull with the state (np and list)
         np_state = (np.array(state, dtype=np.float32),)
         np_state = np.reshape(np_state, [1, observation_space])
@@ -351,11 +368,11 @@ def dqn_learning_keras_memoryReplay(env, model):
 
             # BECAREFUL with the action!
             action = choose_action(model, np_state, action_space, exploration_rate)
-            disc_action = discrete_action(action)
+            disc_action = discrete_action(action, step_size)
             # print(action)
             time_start_action = time.time()
             print("################INSIDE ENV################")
-            new_state, reward, done, info = env.step(disc_action)
+            new_state, reward, done, _ = env.step(disc_action)
             print("################INSIDE ENV################")
             print("[ INFO] Time for the action ", j, ": ", time.time()-time_start_action)
             time_start_print = time.time()
@@ -406,92 +423,69 @@ def dqn_learning_keras_memoryReplay(env, model):
         print("*********************************************")
         print("*********************************************")
 
-        if i%10 == 0:
+        if i%5 == 0:
             # Save the model
             print("Saving...")
+            
             # model.save('/home/roboticlab14/catkin_ws/src/envirenement_reinforcement_learning/environment_package/src/saves/model/try_1.h5')
-            model.save('/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/model/try_1.h5')
+            path = folder_path + 'model/'
+            name = 'model_'
+            total_model_path = path + name + str(i) + '.h5' 
+            # model.save('/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/model/try_1.h5')
+            model.save(total_model_path)
             # Save datas
             print("Saving list_total_reward: ", save(list_total_reward, i, 
-                arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/reward/", 
+                arg_path = folder_path + "reward/", 
                 arg_name="list_total_reward_"))
             print("Saving list_memory_history: ", save(list_memory_history, 
-                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/trajectory/", 
+                i, arg_path = folder_path + "trajectory/", 
                 arg_name = "list_memory_history_"))
             print("Saving list_done: ", save(list_done, 
-                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/done/", 
+                i, arg_path = folder_path + "done/", 
                 arg_name = "list_done_"))
             print("Saving list_loss: ", save(list_loss, 
-                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/losses/", 
+                i, arg_path = folder_path + "losses/", 
                 arg_name = "list_loss_"))
             # Save the memory!
-            
             print("Saving memory: ", save(memory, 
-                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/memory/", 
+                i, arg_path = folder_path + "memory/", 
                 arg_name = "memory_"))
 
-
-# load_weights only sets the weights of your network. You still need to define its architecture before calling load_weights:
-def create_model():
-    '''
-    Create a model with defined parameters
-       # Model params
-    
-    NN: 10 inputs, 4 outputs and 2 hidden layers
-         ...
-    s1 - ... - q_1
-    s2 - ... - q_2
-    s3 - ... - q_3
-         ... - q_4
-         ...
-
-    '''
-
-    # Leanring params
-    LEARNING_RATE = 0.001
-
-    # Env params
-    observation_space = 10
-    action_space = 4
-
-    model = Sequential()
-    model.add(Dense(64, input_shape=(observation_space,), activation="relu"))
-    model.add(Dense(64, activation="relu"))
-    model.add(Dense(action_space, activation="linear"))
-    model.compile(loss="mse", optimizer=Adam(lr=LEARNING_RATE))
-
-    return model
-
-def load_trained_model(weights_path):
-    '''
-    Return the model pretrained
-
-    '''
-    model = create_model()
-    model.load_weights(weights_path)
-
-    return model
-
-def use_model(env, model):
+def use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
     '''
     Use a trained model 
     '''
-    epidodes_max = 5
-    demo_step = 10
-    observation_space = 10
+    # Parameters;
+    env.set_mode(mode="evaluating")
+    list_target_points = []
+    list_target_points.append([0.5, -0.3, 0.1])
+    list_target_points.append([0.6, -0.0, 0.1])
+    list_target_points.append([0.4, 0.3, 0.1])
+    # list_target_points.append([0.4, -0.4, 0.1])
+    # list_target_points.append([0.6, 0.1, 0.1])
+    # list_target_points.append([0.6, -0.1, 0.1])
+    # list_target_points.append([0.5, -0.2, 0.1])
+    np_target_points = np.array(list_target_points)
+    epidodes_max = len(list_target_points)
     done = False
-    for i in range(0, epidodes_max):
+    list_loss = [] # to save for compute the mean of this model
+    for i in range(epidodes_max):
         j = 0
+        env.set_for_evaluation(np_target_points[i])
+        rospy.sleep(0.05)
         state = env.reset()
+        rospy.sleep(5.0)
         np_state = (np.array(state, dtype=np.float32),)
         np_state = np.reshape(np_state, [1, observation_space])
-        # for j in range(0, demo_step):
-        while j < demo_step and not done:
+        
+        while j < MAX_STEPS and not done:
             q_values = model.predict(np_state)
-            disc_action = discrete_action(np.argmax(q_values[0]))
+            action = np.argmax(q_values[0])
+            disc_action = discrete_action(action, step_size)
             new_state, reward, done, info = env.step(disc_action)
             print("*********************************************")
             print("Observation: ", new_state)
+            print("Action: ", action_to_string(action))
             print("Reward: ", reward)
             print("Done: ", done)
             print("Episode: ", i)
@@ -499,49 +493,102 @@ def use_model(env, model):
             print("*********************************************")
             np_new_state = (np.array(new_state, dtype=np.float32),)
             np_new_state = np.reshape(np_new_state, [1, observation_space])
+
+            loss = experience_evaluating(model, np_state, action, reward, np_new_state, done, GAMMA)
+            list_loss.append(loss)
             np_state = np_new_state
             state = new_state
             j+=1
         i+=1
+    return sum(list_loss)/len(list_loss)
 
-def catch_object(env):
-    env.reset()
-    env.set_endEffector_pose([0.5, 0.0, 0.1, 3.1457, 0.0, 0.0])
-    rospy.sleep(15)
-    env.set_endEffector_pose([0.5, 0.0, 0.3, 3.1457, 0.0, 0.0])
-    env.set_endEffector_pose([0.0, 0.5, 0.30, 3.1457, 0.0, 0.0])
+def compute_exploration_decay(EXPLORATION_MAX, EXPLORATION_MIN, EPISODE_MAX, MAX_STEPS):
+    '''
+    Compute the exploration decay in function of Episode max
 
-def slide_object(env):
-    env.reset()
-    env.set_endEffector_pose([0.4, 0.3, 0.1, 3.1457, 0.0, 0.0])
-    # rospy.sleep(15)
-    env.set_endEffector_pose([0.4, 0.1, 0.1, 3.1457, 0.0, 0.0])
-    env.set_endEffector_pose([0.4, -0.1, 0.1, 3.1457, 0.0, 0.0])
-    env.set_endEffector_pose([0.4, -0.3, 0.1, 3.1457, 0.0, 0.0])
+    Output: EXPLORATION_DECAY
+
+    EXPLORATION_MAX = 1.0
+    EXPLORATION_MIN = 0.01
+    EXPLORATION_DECAY = 0.999790 #0.9993 # Over 500 =>0.9908, for 2500 =>0.998107
+    # Use exploration_rate = exploration_rate*EXPLORATION_DECAY
+    # exploration decay = 10^(log(0.01)/EPISODE_MAX)
+    '''
+    return 10**(math.log10(EXPLORATION_MIN)/(EPISODE_MAX*MAX_STEPS/4*3))
 
 def main():
     rospy.init_node('training_node', anonymous=True, log_level=rospy.WARN)
     print("Start")
-    # env = init_env()
-    # env.reset()
+    
+    # Parameters:
+    EPISODE_MAX = 1200
+    MAX_STEPS = 40
+    #PARAMS
+    GAMMA = 0.95
+    MEMORY_SIZE = EPISODE_MAX*10
+    BATCH_SIZE = 128
+    EXPLORATION_MAX = 1.0
+    EXPLORATION_MIN = 0.01
+    EXPLORATION_DECAY = compute_exploration_decay(EXPLORATION_MAX, EXPLORATION_MIN, EPISODE_MAX, MAX_STEPS)
+
+    # Env params
+    observation_space = 10
+    action_space = 4
+    step_size = 0.025
+    task = "position_learning"
+
+    # Neural Net:
+    hidden_layers = 2
+    neurons = 64
+    LEARNING_RATE = 0.001
 
     training = True
     if training:
+        _, folder_path = utils.init_folders(task=task)
+        utils.create_summary(folder_path, task, EPISODE_MAX, MAX_STEPS, GAMMA,MEMORY_SIZE, BATCH_SIZE, EXPLORATION_MAX, EXPLORATION_MIN, EXPLORATION_DECAY, observation_space, action_space, hidden_layers, neurons, LEARNING_RATE, step_size)
+
         # Training using demos
-        model = create_model()
+        model = utils.create_model(inputs=observation_space, outputs=action_space, hidden_layers=hidden_layers, neurons=neurons, LEARNING_RATE = LEARNING_RATE)
         env = init_env()
         # memory = create_demo(env)
         # GAMMA = 0.95
         # model = training_from_demo(model, memory, GAMMA)
-        dqn_learning_keras_memoryReplay(env, model)
+        dqn_learning_keras_memoryReplay(env, model, folder_path, EPISODE_MAX, MAX_STEPS, GAMMA,MEMORY_SIZE, BATCH_SIZE, EXPLORATION_MAX, EXPLORATION_MIN, EXPLORATION_DECAY, observation_space, action_space, step_size)
     else:
         # Predict model
-        model = load_trained_model("/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/20190716_095200_learn_to_go_position/model/try_1.h5")
         env = init_env()
-        use_model(env, model)
-
+        number_episode = 1195
+        step_btw2_load = 50
+        list_mean_loss = []
+        folder_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/"
+        folder_name = "20190802_184358_learn_to_go_position/"
+        folder_path = folder_path + folder_name
+        for i in xrange(0, number_episode, step_btw2_load):
+            model_path = folder_path +"model/"
+            model_name = "model_"
+            total_model_path = model_path + model_name + str(i) + ".h5"
+            model = utils.load_trained_model(total_model_path)
+            list_mean_loss.append((i, use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA)))
+        save(list_mean_loss, 
+            arg_path = folder_path + "mean_loss/", 
+            arg_name = "mean_loss")
+        print(list_mean_loss)
     print("End")
 
 if __name__ == '__main__':
     main()
 
+# def catch_object(env):
+#     env.reset()
+#     env.set_endEffector_pose([0.5, 0.0, 0.1, 3.1457, 0.0, 0.0])
+#     rospy.sleep(15)
+#     env.set_endEffector_pose([0.5, 0.0, 0.3, 3.1457, 0.0, 0.0])
+#     env.set_endEffector_pose([0.0, 0.5, 0.30, 3.1457, 0.0, 0.0])
+
+# def slide_object(env):
+#     env.reset()
+#     env.set_endEffector_pose([0.4, 0.3, 0.1, 3.1457, 0.0, 0.0])
+#     # rospy.sleep(15)
+#     env.set_endEffector_pose([0.4, 0.1, 0.1, 3.1457, 0.0, 0.0])
+#     env.set_endEffector_pose([0.4, -0.1, 0.1, 3.1457, 0.0, 0.0])
+#     env.set_endEffector_pose([0.4, -0.3, 0.1, 3.1457, 0.0, 0.0])

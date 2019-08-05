@@ -63,7 +63,7 @@ class RobotGazeboEnv(gym.Env):
         #Gazebo:
         self.reset_simulation_proxy = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
         self.reset_world_proxy = rospy.ServiceProxy('/gazebo/reset_world', Empty)
-        self.reset_world_or_sim = "WORLD" # SIMULATION WORLD NO_RESET
+        self.reset_world_or_sim = "NO_RESET" # SIMULATION WORLD NO_RESET
         self.unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
         self.pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
 
@@ -182,7 +182,7 @@ class RobotGazeboEnv(gym.Env):
             result = self.random_target_position()
         elif self.env_mode == "evaluating":
             print("[ Info]: env mode: evaluating")
-            
+
         self.load_stop_controller()
         self.start_controller()
         self.pause()
@@ -202,7 +202,7 @@ class RobotGazeboEnv(gym.Env):
         #     print("Continuer: ", self.continuous)
         # self.continuous = False
         # self._init_env_variables()
-        # rospy.sleep(2.0)
+        rospy.sleep(4.0)
         return self._get_obs()
 
     def close(self):
@@ -273,7 +273,11 @@ class RobotGazeboEnv(gym.Env):
         Resets a simulation
         """
         # self.gazebo.resetSim()
+        # self.remove_object()
+
+
         if self.reset_world_or_sim == "SIMULATION":
+            # reset also the physic environment!
             rospy.wait_for_service('/gazebo/reset_simulation')
             self.reset_simulation_proxy()
         elif self.reset_world_or_sim == "WORLD":
@@ -289,8 +293,8 @@ class RobotGazeboEnv(gym.Env):
         # # rospy.sleep(0.1)
         # self.spawn_object()
         # Add and delete OBJECT 
-        # self.remove_object()
-        # # rospy.sleep(0.1)
+        
+        # rospy.sleep(0.1)
         # self.spawn_object()
 
         # Robot REMOVE AND SPAWN ********************************
@@ -412,7 +416,7 @@ class RobotGazeboEnv(gym.Env):
         vector_observ_pose.append(observations[2])
 
         # Check if the hand effector is close to the target in cm!
-        if self.distance_between_vectors(vector_observ_pose, self.target_position) < 0.1:
+        if self.distance_between_vectors(vector_observ_pose, self.target_position) < 0.11:
             done = True
 
         return done
@@ -672,7 +676,6 @@ class RobotGazeboEnv(gym.Env):
         Remove an object
         https://github.com/ipa320/srs_public/blob/master/srs_user_tests/ros/scripts/spawn_object.py
         '''
-        # print("Remove object")
         name = "object_to_push"
         rospy.wait_for_service("/gazebo/delete_model")
         srv_delete_model = rospy.ServiceProxy('/gazebo/delete_model', DeleteModel)
@@ -680,11 +683,10 @@ class RobotGazeboEnv(gym.Env):
         req.model_name = name
         # res = srv_delete_model(name)
         try:
-			res = srv_delete_model(name)
+            res = srv_delete_model(name)
         except rospy.ServiceException, e:
-            print("ERROR: CANNOT REMOVE OBJECT: ", name)
+            print("ERROR: CANNOT REMOVE Robot: ", name)
 
-    
     def spawn_robot(self):
         '''
         Spawn an object at a defined position

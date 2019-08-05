@@ -1,5 +1,6 @@
 #!/usr/bin/env python2
 
+import utils
 import sys
 # if sys.version_info[0] < 3:
 #         raise Exception("Must be using Python 3 on ROS")
@@ -293,31 +294,12 @@ def create_demo(env):
     return memory_from_demo
 
 # Neural network with 2 hidden layer using Keras + experience replay
-def dqn_learning_keras_memoryReplay(env, model):
+def dqn_learning_keras_memoryReplay(env, model, folder_path, EPISODE_MAX, MAX_STEPS, GAMMA,MEMORY_SIZE, BATCH_SIZE, EXPLORATION_MAX, EXPLORATION_MIN, EXPLORATION_DECAY, observation_space, action_space, step_size):
     '''
     function which is a neural net using Keras with memory replay
     '''
 
-    # Time optimzation:
-    
-    EPISODE_MAX = 300
-    MAX_STEPS = 40
-    #PARAMS
-    GAMMA = 0.95
-    MEMORY_SIZE = EPISODE_MAX
-    BATCH_SIZE = 2
-    EXPLORATION_MAX = 1.0
-    EXPLORATION_MIN = 0.01
-    EXPLORATION_DECAY = 0.99961 #0.9993 # Over 500 =>0.9908, for 2500 =>0.998107
-    # Use exploration_rate = exploration_rate*EXPLORATION_DECAY
-    # exploration decay = 10^(log(0.01)/EPISODE_MAX)
-
-    # Env params
-    observation_space = 13
-    action_space = 4
-
     exploration_rate = EXPLORATION_MAX
-
     # Experience replay:
     memory = deque(maxlen=MEMORY_SIZE)
 
@@ -406,71 +388,32 @@ def dqn_learning_keras_memoryReplay(env, model):
         print("*********************************************")
         print("*********************************************")
 
-        if i%10 == 0:
+        #TODO: write it in an external function
+        if i%5 == 0:
             # Save the model
             print("Saving...")
+            
             # model.save('/home/roboticlab14/catkin_ws/src/envirenement_reinforcement_learning/environment_package/src/saves/model/try_1.h5')
-            model.save('/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas_push/learn_to_push/model/try_1.h5')
+            path = folder_path + 'model/'
+            name = 'model_'
+            total_model_path = path + name + str(i) + '.h5' 
+            model.save(total_model_path)
             # Save datas
             print("Saving list_total_reward: ", save(list_total_reward, i, 
-                arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas_push/learn_to_push/reward/", 
+                arg_path = folder_path + "reward/", 
                 arg_name="list_total_reward_"))
             print("Saving list_memory_history: ", save(list_memory_history, 
-                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas_push/learn_to_push/trajectory/", 
+                i, arg_path = folder_path + "trajectory/", 
                 arg_name = "list_memory_history_"))
             print("Saving list_done: ", save(list_done, 
-                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas_push/learn_to_push/done/", 
+                i, arg_path = folder_path + "done/", 
                 arg_name = "list_done_"))
             print("Saving list_loss: ", save(list_loss, 
-                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas_push/learn_to_push/losses/", 
+                i, arg_path = folder_path + "losses/", 
                 arg_name = "list_loss_"))
-            # Save the memory!
-            
             print("Saving memory: ", save(memory, 
-                i, arg_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas_push/learn_to_push/memory/", 
+                i, arg_path = folder_path + "memory/", 
                 arg_name = "memory_"))
-
-
-# load_weights only sets the weights of your network. You still need to define its architecture before calling load_weights:
-def create_model():
-    '''
-    Create a model with defined parameters
-       # Model params
-    
-    NN: 10 inputs, 4 outputs and 2 hidden layers
-         ...
-    s1 - ... - q_1
-    s2 - ... - q_2
-    s3 - ... - q_3
-         ... - q_4
-         ...
-
-    '''
-
-    # Leanring params
-    LEARNING_RATE = 0.001
-
-    # Env params
-    observation_space = 13
-    action_space = 4
-
-    model = Sequential()
-    model.add(Dense(64, input_shape=(observation_space,), activation="relu"))
-    model.add(Dense(64, activation="relu"))
-    model.add(Dense(action_space, activation="linear"))
-    model.compile(loss="mse", optimizer=Adam(lr=LEARNING_RATE))
-
-    return model
-
-def load_trained_model(weights_path):
-    '''
-    Return the model pretrained
-
-    '''
-    model = create_model()
-    model.load_weights(weights_path)
-
-    return model
 
 def use_model(env, model):
     '''
@@ -504,39 +447,46 @@ def use_model(env, model):
             j+=1
         i+=1
 
-def catch_object(env):
-    env.reset()
-    env.set_endEffector_pose([0.5, 0.0, 0.1, 3.1457, 0.0, 0.0])
-    rospy.sleep(15)
-    env.set_endEffector_pose([0.5, 0.0, 0.3, 3.1457, 0.0, 0.0])
-    env.set_endEffector_pose([0.0, 0.5, 0.30, 3.1457, 0.0, 0.0])
-
-def slide_object(env):
-    env.reset()
-    env.set_endEffector_pose([0.4, 0.3, 0.1, 3.1457, 0.0, 0.0])
-    # rospy.sleep(15)
-    env.set_endEffector_pose([0.4, 0.1, 0.1, 3.1457, 0.0, 0.0])
-    env.set_endEffector_pose([0.4, -0.1, 0.1, 3.1457, 0.0, 0.0])
-    env.set_endEffector_pose([0.4, -0.3, 0.1, 3.1457, 0.0, 0.0])
-
 def main():
     rospy.init_node('training_node', anonymous=True, log_level=rospy.WARN)
     print("Start")
-    # env = init_env()
-    # env.reset()
+    
+     # Parameters:
+    EPISODE_MAX = 100
+    MAX_STEPS = 40
+    #PARAMS
+    GAMMA = 0.95
+    MEMORY_SIZE = EPISODE_MAX*10
+    BATCH_SIZE = 128
+    EXPLORATION_MAX = 1.0
+    EXPLORATION_MIN = 0.01
+    EXPLORATION_DECAY = utils.compute_exploration_decay(EXPLORATION_MAX, EXPLORATION_MIN, EPISODE_MAX, MAX_STEPS)
 
+    # Env params
+    observation_space = 13
+    action_space = 4
+    step_size = 0.025
+    task = "pushing_learning"
+
+    # Neural Net:
+    hidden_layers = 2
+    neurons = 64
+    LEARNING_RATE = 0.001
+    
     training = True
     if training:
         # Training using demos
-        model = create_model()
+        _, folder_path = utils.init_folders(task="pushing_learning")
+        utils.create_summary(folder_path, task, EPISODE_MAX, MAX_STEPS, GAMMA,MEMORY_SIZE, BATCH_SIZE, EXPLORATION_MAX, EXPLORATION_MIN, EXPLORATION_DECAY, observation_space, action_space, hidden_layers, neurons, LEARNING_RATE, step_size)
+
+        # Training using demos
+        model = utils.create_model(inputs=observation_space, outputs=action_space, hidden_layers=hidden_layers, neurons=neurons, LEARNING_RATE = LEARNING_RATE)
+        
         env = init_env()
-        # memory = create_demo(env)
-        # GAMMA = 0.95
-        # model = training_from_demo(model, memory, GAMMA)
-        dqn_learning_keras_memoryReplay(env, model)
+        dqn_learning_keras_memoryReplay(env, model, folder_path, EPISODE_MAX, MAX_STEPS, GAMMA,MEMORY_SIZE, BATCH_SIZE, EXPLORATION_MAX, EXPLORATION_MIN, EXPLORATION_DECAY, observation_space, action_space, step_size)
     else:
         # Predict model
-        model = load_trained_model("/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/20190716_095200_learn_to_go_position/model/try_1.h5")
+        model = utils.load_trained_model("/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/20190716_095200_learn_to_go_position/model/try_1.h5")
         env = init_env()
         use_model(env, model)
 
