@@ -451,7 +451,7 @@ def dqn_learning_keras_memoryReplay_v2(env, model, folder_path, EPISODE_MAX, MAX
     done = False
 
     for i in range(episode_max):
-        time_start_epoch = time.time()
+        # time_start_epoch = time.time()
         total_reward = 0
         j = 0
         state = env.reset()
@@ -465,7 +465,7 @@ def dqn_learning_keras_memoryReplay_v2(env, model, folder_path, EPISODE_MAX, MAX
         list_memory = []
         
         while j < MAX_STEPS and not done: # step inside an episode
-            time_start_step = time.time()
+            # time_start_step = time.time()
             
             # print("[INFO]: episode: ", i, ", step: ", j)
 
@@ -473,7 +473,7 @@ def dqn_learning_keras_memoryReplay_v2(env, model, folder_path, EPISODE_MAX, MAX
             action = choose_action(model, np_state, action_space, exploration_rate)
             disc_action = discrete_action(action, step_size)
             # print(action)
-            time_start_action = time.time()
+            # time_start_action = time.time()
             # print("################INSIDE ENV################")
             new_state, reward, done, _ = env.step(disc_action)
             # print("################INSIDE ENV################")
@@ -629,7 +629,7 @@ def main():
     
     # Parameters:
     EPISODE_MAX = 20
-    MAX_STEPS = 40
+    MAX_STEPS = 60
     #PARAMS
     GAMMA = 0.95
     MEMORY_SIZE = EPISODE_MAX*10
