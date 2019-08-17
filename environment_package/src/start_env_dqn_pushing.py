@@ -103,26 +103,6 @@ def discrete_action(action):
         a[2] = -step_size
     return a
 
-# save the data
-def save(list_theta, episode, arg_path= 
-        "/home/roboticlab14/catkin_ws/src/envirenement_reinforcement_learning/environment_package/src/saves/pickles/", 
-        arg_name = "list_of_reward_"):
-    '''
-    Save a pickle file of a list that you want to save.
-
-    '''
-    saved = False
-    try:
-        path = arg_path
-        name = arg_name
-        full_path = path + name + str(episode) + ".pkl"
-        with open(full_path, 'wb') as f:
-            pickle.dump(list_theta, f, protocol=pickle.HIGHEST_PROTOCOL)
-        saved = True
-    except:
-        print("Couldn't save the file .pkl")
-    return saved
-
 def choose_action(model, state, action_space, exploration_rate):
     '''
     Choose an action using Epsilon-Greedy exploration/exploitation
@@ -399,19 +379,19 @@ def dqn_learning_keras_memoryReplay(env, model, folder_path, EPISODE_MAX, MAX_ST
             total_model_path = path + name + str(i) + '.h5' 
             model.save(total_model_path)
             # Save datas
-            print("Saving list_total_reward: ", save(list_total_reward, i, 
+            print("Saving list_total_reward: ", utils.save(list_total_reward, i, 
                 arg_path = folder_path + "reward/", 
                 arg_name="list_total_reward_"))
-            print("Saving list_memory_history: ", save(list_memory_history, 
+            print("Saving list_memory_history: ", utils.save(list_memory_history, 
                 i, arg_path = folder_path + "trajectory/", 
                 arg_name = "list_memory_history_"))
-            print("Saving list_done: ", save(list_done, 
+            print("Saving list_done: ", utils.save(list_done, 
                 i, arg_path = folder_path + "done/", 
                 arg_name = "list_done_"))
-            print("Saving list_loss: ", save(list_loss, 
+            print("Saving list_loss: ", utils.save(list_loss, 
                 i, arg_path = folder_path + "losses/", 
                 arg_name = "list_loss_"))
-            print("Saving memory: ", save(memory, 
+            print("Saving memory: ", utils.save(memory, 
                 i, arg_path = folder_path + "memory/", 
                 arg_name = "memory_"))
 
@@ -469,7 +449,7 @@ def main():
     task = "pushing_learning"
 
     # Neural Net:
-    hidden_layers = 2
+    hidden_layers = 3
     neurons = 64
     LEARNING_RATE = 0.001
     

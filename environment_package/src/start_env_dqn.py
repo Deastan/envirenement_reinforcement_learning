@@ -121,29 +121,6 @@ def action_to_string(action):
         string_action = "down in Z"
     return string_action
 
-# save the data
-def save(list_theta, episode=None, arg_path= 
-        "/home/roboticlab14/catkin_ws/src/envirenement_reinforcement_learning/environment_package/src/saves/pickles/", 
-        arg_name = "list_of_reward_"):
-    '''
-    Save a pickle file of a list that you want to save.
-
-    '''
-    saved = False
-    try:
-        path = arg_path
-        name = arg_name
-        if episode == None:
-            full_path = path + name + ".pkl"
-        else:
-            full_path = path + name + str(episode) + ".pkl"
-        with open(full_path, 'wb') as f:
-            pickle.dump(list_theta, f, protocol=pickle.HIGHEST_PROTOCOL)
-        saved = True
-    except:
-        print("Couldn't save the file .pkl")
-    return saved
-
 def choose_action(model, state, action_space, exploration_rate):
     '''
     Choose an action using Epsilon-Greedy exploration/exploitation
@@ -280,8 +257,6 @@ def create_demo(env):
         np_state = np.reshape(np_state, [1, observation_space])
         for j in range(0, demo_step):
 
-            
-            
             disc_action = discrete_action(action[j],step_size = 0.05)
             new_state, reward, done, info = env.step(disc_action)
             print("*********************************************")
@@ -390,7 +365,7 @@ def dqn_learning_keras_memoryReplay(env, model, folder_path, EPISODE_MAX, MAX_ST
             np_new_state = np.reshape(np_new_state, [1, observation_space])
             # np_new_state = np.identity(7)[np_new_state:np_new_state+1]
 
-            # Momory replay
+            # Memory replay
             # memory = save_forReplay(memory, state, action, reward, new_state, done)
             time_start_save_for_replay = time.time()
             save_forReplay(memory, np_state, action, reward, np_new_state, done)
@@ -434,20 +409,20 @@ def dqn_learning_keras_memoryReplay(env, model, folder_path, EPISODE_MAX, MAX_ST
             # model.save('/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/learn_to_go_position/model/try_1.h5')
             model.save(total_model_path)
             # Save datas
-            print("Saving list_total_reward: ", save(list_total_reward, i, 
+            print("Saving list_total_reward: ", utils.save(list_total_reward, i, 
                 arg_path = folder_path + "reward/", 
                 arg_name="list_total_reward_"))
-            print("Saving list_memory_history: ", save(list_memory_history, 
+            print("Saving list_memory_history: ", utils.save(list_memory_history, 
                 i, arg_path = folder_path + "trajectory/", 
                 arg_name = "list_memory_history_"))
-            print("Saving list_done: ", save(list_done, 
+            print("Saving list_done: ", utils.save(list_done, 
                 i, arg_path = folder_path + "done/", 
                 arg_name = "list_done_"))
-            print("Saving list_loss: ", save(list_loss, 
+            print("Saving list_loss: ", utils.save(list_loss, 
                 i, arg_path = folder_path + "losses/", 
                 arg_name = "list_loss_"))
             # Save the memory!
-            print("Saving memory: ", save(memory, 
+            print("Saving memory: ", utils.save(memory, 
                 i, arg_path = folder_path + "memory/", 
                 arg_name = "memory_"))
 
@@ -569,7 +544,7 @@ def main():
             total_model_path = model_path + model_name + str(i) + ".h5"
             model = utils.load_trained_model(total_model_path)
             list_mean_loss.append((i, use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA)))
-        save(list_mean_loss, 
+        utils.save(list_mean_loss, number_episode,
             arg_path = folder_path + "mean_loss/", 
             arg_name = "mean_loss")
         print(list_mean_loss)

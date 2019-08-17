@@ -63,7 +63,7 @@ class RobotGazeboEnv(gym.Env):
         #Gazebo:
         self.reset_simulation_proxy = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
         self.reset_world_proxy = rospy.ServiceProxy('/gazebo/reset_world', Empty)
-        self.reset_world_or_sim = "WORLD" # SIMULATION WORLD NO_RESET
+        self.reset_world_or_sim = "NO_RESET" # SIMULATION WORLD NO_RESET
         self.unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
         self.pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
 
@@ -227,8 +227,11 @@ class RobotGazeboEnv(gym.Env):
             print("ee_position: ", self.result_ee_position, ", object: ", self.result_object_pose, ", target: ", self.result_target)
             rospy.sleep(0.01)
 
+        ## KILL object position node: Gazebo_object_pose
+
         self.load_stop_controller()
         self.start_controller()
+        rospy.sleep(0.1) # to be sure the iiwa is on the air
         self.pause()
         self._reset_sim()
         self.unpause()
@@ -516,7 +519,7 @@ class RobotGazeboEnv(gym.Env):
         vector_observ_pose.append(observations[12])
 
         # Check if the hand effector is close to the target in cm!
-        if self.distance_between_vectors(vector_observ_pose, self.target_position) < 0.3:
+        if self.distance_between_vectors(vector_observ_pose, self.target_position) < 0.11:
             done = True
 
         return done
@@ -993,8 +996,8 @@ class RobotGazeboEnv(gym.Env):
         object_pose = Pose()
 
         while result==False:
-            object_pose.position.x = random.uniform(0.3, 0.6)
-            object_pose.position.y = random.uniform(-0.6, 0.6)
+            object_pose.position.x = random.uniform(0.4, 0.6)
+            object_pose.position.y = random.uniform(-0.4, 0.4)
             object_pose.position.z = 0.1
             
             result = self.check_workspace(object_pose)
@@ -1059,8 +1062,9 @@ class RobotGazeboEnv(gym.Env):
         # self.current_object_position.append(msg.position.x)
         # self.current_object_position.append(msg.position.y)
         # self.current_object_position.append(msg.position.z)
-        self.current_object_position[0] = msg.position.x
-        self.current_object_position[1] = msg.position.y
-        self.current_object_position[2] = msg.position.z
-
-
+        try:
+            self.current_object_position[0] = msg.position.x
+            self.current_object_position[1] = msg.position.y
+            self.current_object_position[2] = msg.position.z
+        except:
+            print("[ ERROR]: Don't have the position of the object!")

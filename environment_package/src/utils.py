@@ -71,8 +71,11 @@ def create_model(inputs=10, outputs=4, hidden_layers=2, neurons=64, LEARNING_RAT
     '''
 
     model = Sequential()
+    print("[ INFO]: Hidden layer 1 is created!")
     model.add(Dense(neurons, input_shape=(inputs,), activation="relu"))
-    model.add(Dense(neurons, activation="relu"))
+    for i in range(hidden_layers-1):
+        print("[ INFO]: Hidden layer ", str(i+2), " is created!")
+        model.add(Dense(neurons, activation="relu"))
     model.add(Dense(outputs, activation="linear"))
     model.compile(loss="mse", optimizer=Adam(lr=LEARNING_RATE))
 
@@ -122,6 +125,7 @@ def save(list_theta, episode, arg_path=
         print("Couldn't save the file .pkl")
     return saved
 
+#TODO: Addapt the saved data function
 # def save_datas_while_training(folder_path):
 #     # Save the model
 #     print("Saving...")
