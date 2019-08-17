@@ -437,7 +437,7 @@ class RobotGazeboEnv(gym.Env):
         # time_start_action = time.time()
         # print("[ INFO] Time for the action ", j, ": ", time.time()-time_start_action)
         # print("Check workplace")
-        time_start_check_workspace = time.time()
+        # time_start_check_workspace = time.time()
         result = False
         x = pose.position.x
         y = pose.position.y
@@ -461,18 +461,18 @@ class RobotGazeboEnv(gym.Env):
             self.out_workspace = False
             result = True
         else:
-            print("Check_workspace: Cannot go at this pose")
+            # print("Check_workspace: Cannot go at this pose")
             # self.reset()
             self.out_workspace = True
-        print("[ INFO] Time for the check_workspace: ", time.time()-time_start_check_workspace)
+        # print("[ INFO] Time for the check_workspace: ", time.time()-time_start_check_workspace)
         return result
 
     def get_endEffector_pose(self):
-        start_time = time.time()
+        # start_time = time.time()
         endEffector_pose = self.group.get_current_pose()
         # stop_time = time.time()
         # print("--- %s seconds ---" % (stop_time - start_time))
-        print("[ INFO] Time for the get_endEffector_pose: ", time.time()-start_time)
+        # print("[ INFO] Time for the get_endEffector_pose: ", time.time()-start_time)
         return endEffector_pose
 
     def set_endEffector_actionToPose(self, action):
@@ -480,7 +480,7 @@ class RobotGazeboEnv(gym.Env):
         Vector action is the delta position (m) and angle (rad)
         (x, y, z, R, P, Y)    
         '''
-        time_start_set_endEffector_actionToPose = time.time()
+        # time_start_set_endEffector_actionToPose = time.time()
         # defining a height that the robot should stay!
         # constant_z = 0.10
 
@@ -536,7 +536,7 @@ class RobotGazeboEnv(gym.Env):
             result = True
         else:
             result = False
-        print("[ INFO] Time for the set_endEffector_actionToPose: ", time.time()-time_start_set_endEffector_actionToPose)
+        # print("[ INFO] Time for the set_endEffector_actionToPose: ", time.time()-time_start_set_endEffector_actionToPose)
         return result
         
     def set_endEffector_pose(self, action):
@@ -544,7 +544,7 @@ class RobotGazeboEnv(gym.Env):
         Vector action is the delta position (m) and angle (rad)
         (x, y, z, R, P, Y)    
         '''
-        time_start_set_endEffector_pose = time.time()
+        # time_start_set_endEffector_pose = time.time()
         q_interm = quaternion_from_euler(action[3], action[4], action[5])
 
         # create pose msg
@@ -567,7 +567,7 @@ class RobotGazeboEnv(gym.Env):
             result = True
         else:
             result = False
-        print("[ INFO] Time for the time_start_set_endEffector_pose: ", time.time()-time_start_set_endEffector_pose)
+        # print("[ INFO] Time for the time_start_set_endEffector_pose: ", time.time()-time_start_set_endEffector_pose)
         return result
 
 
@@ -576,26 +576,26 @@ class RobotGazeboEnv(gym.Env):
         '''
         Send to the "controller" the positions (trajectory) where it want to go
         '''
-        time_start_execute_endEffector_pose = time.time()
+        # time_start_execute_endEffector_pose = time.time()
         result = False
         # self.group.shift_pose_target(5, action)
         self.group.set_pose_target(pose)
-        time_start_execute_endEffector_pose_plan = time.time()
+        # time_start_execute_endEffector_pose_plan = time.time()
         result = self.group.go(wait=True)
-        time_start_execute_endEffector_pose_go = time.time()
+        # time_start_execute_endEffector_pose_go = time.time()
 
         self.group.stop()
-        time_start_execute_endEffector_pose_stop = time.time()
+        # time_start_execute_endEffector_pose_stop = time.time()
         # It is always good to clear your targets after planning with poses.
         # Note: there is no equivalent function for clear_joint_value_targets()
         self.group.clear_pose_targets()
-        time_start_execute_endEffector_pose_clear = time.time()
+        # time_start_execute_endEffector_pose_clear = time.time()
 
-        print("[ INFO] Time for plan: ", time_start_execute_endEffector_pose_plan-time_start_execute_endEffector_pose)
-        print("[ INFO] Time for go: ", time_start_execute_endEffector_pose_go-time_start_execute_endEffector_pose_plan)
-        print("[ INFO] Time for: Stop: ", time_start_execute_endEffector_pose_stop-time_start_execute_endEffector_pose_go)
-        print("[ INFO] Time for: Clear: ", time_start_execute_endEffector_pose_clear-time_start_execute_endEffector_pose_stop)
-        print("[ INFO] Time for the time_start_execute_endEffector_pose: ", time.time()-time_start_execute_endEffector_pose)
+        # print("[ INFO] Time for plan: ", time_start_execute_endEffector_pose_plan-time_start_execute_endEffector_pose)
+        # print("[ INFO] Time for go: ", time_start_execute_endEffector_pose_go-time_start_execute_endEffector_pose_plan)
+        # print("[ INFO] Time for: Stop: ", time_start_execute_endEffector_pose_stop-time_start_execute_endEffector_pose_go)
+        # print("[ INFO] Time for: Clear: ", time_start_execute_endEffector_pose_clear-time_start_execute_endEffector_pose_stop)
+        # print("[ INFO] Time for the time_start_execute_endEffector_pose: ", time.time()-time_start_execute_endEffector_pose)
         return result
 
     def set_joints_execute(self, joints_angle):
@@ -603,7 +603,7 @@ class RobotGazeboEnv(gym.Env):
         Execute the trajectory to go to the desired joints angle
         
         '''
-        time_start_set_joints_execute = time.time()
+        # time_start_set_joints_execute = time.time()
         # self.group.set_joint_value_target(joint_goal)
         self.group.set_joint_value_target(joints_angle)
         # The go command can be called with joint values, poses, or without any
@@ -618,17 +618,17 @@ class RobotGazeboEnv(gym.Env):
         self.group.stop()
         # self.group.clear_pose_targets()
         # self.group.forget_joint_values()
-        print("[ INFO] Time for the time_start_set_joints_execute: ", time.time()-time_start_set_joints_execute)
+        # print("[ INFO] Time for the time_start_set_joints_execute: ", time.time()-time_start_set_joints_execute)
         return result
 
     # Calculates the distance btw two position vectors
     def distance_between_vectors(self, v1, v2):
         """
         """
-        time_start_distance_between_vectors = time.time()
+        # time_start_distance_between_vectors = time.time()
         # self.group.set_joint_value_target(joint_goal)
         dist = np.linalg.norm(np.array(v1) - np.array(v2))
-        print("[ INFO] Time for the time_start_distance_between_vectors: ", time.time()-time_start_distance_between_vectors)
+        # print("[ INFO] Time for the time_start_distance_between_vectors: ", time.time()-time_start_distance_between_vectors)
         return dist
 
     # TODO: ADD a random position of the object
