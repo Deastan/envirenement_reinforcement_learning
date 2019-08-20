@@ -74,7 +74,7 @@ class RobotGazeboEnv(gym.Env):
         # Creation of moveit variables
         # self.moveit_object = MoveIiwa()
         self.pub_cartesianPose = rospy.Publisher('/iiwa/moveToCartesianPose', Pose, queue_size=1)
-        
+
         moveit_commander.roscpp_initialize(sys.argv)
         self.robot = moveit_commander.RobotCommander()
         self.scene = moveit_commander.PlanningSceneInterface()
@@ -121,9 +121,9 @@ class RobotGazeboEnv(gym.Env):
         self.target_position.append(target_y)
         self.target_position.append(target_z)
 
-        # eePositon:
-        ee_x = 0.6#0.0#0.5
-        ee_y = +0.2#0.5
+        # OBJECTS:
+        ee_x = 0.5#0.0#0.5
+        ee_y = -0.5#0.5
         ee_z = self.constant_z#0.5
         self.ee_position = []
         self.ee_position.append(ee_x)

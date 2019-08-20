@@ -169,16 +169,31 @@ def init_folders(task="position_learning"):
     if int(now.month) < 10:   
         str_month = str(0) + str(now.month)
     else:
-        str_month = now.month
+        str_month = str(now.month)
     # Days:
     if int(now.day) < 10:   
         str_day = str(0) + str(now.day)
     else:
-        str_day = now.day
-    prefix_folder_name = str(now.year) + str_month + str_day + "_" + str(now.hour) + str(now.minute) + str(now.second) + "_"
+        str_day = str(now.day)
+    # Hour
+    if int(now.hour) < 10:   
+        str_hour = str(0) + str(now.hour)
+    else:
+        str_hour = str(now.hour)
+    # Min
+    if int(now.minute) < 10:   
+        str_min = str(0) + str(now.minute)
+    else:
+        str_min = str(now.minute)
+    # Sec
+    if int(now.second) < 10:   
+        str_sec = str(0) + str(now.second)
+    else:
+        str_sec = str(now.second)
+    prefix_folder_name = str(now.year) + str_month + str_day + "_" + str_hour + str_min + str_sec + "_"
     folder_name = prefix_folder_name + task + "/" #"learn_to_go_position/"
 
-    list_sub_folder_names = ["done", "losses", "memory", "model", "reward", "trajectory", "mean_loss"]
+    list_sub_folder_names = ["done", "losses_from_demos", "losses", "memory", "model_from_demos", "model", "reward", "trajectory", "mean_loss", "evaluation"]
     try:
         for names in list_sub_folder_names:
             path_sub_folders = path + folder_name + names

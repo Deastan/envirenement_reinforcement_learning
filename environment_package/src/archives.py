@@ -611,6 +611,50 @@ def use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
         i+=1
     return sum(list_loss)/len(list_loss)
 
+def use_model_v2(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
+    '''
+    Use a trained model 
+    '''
+    # Parameters;
+    env.set_mode(mode="evaluating")
+    
+    
+    epidodes_max = 2
+    done = False
+    list_loss = [] # to save for compute the mean of this model
+    for i in range(epidodes_max):
+        j = 0
+        # env.set_for_evaluation(np_target_points[i])
+        # rospy.sleep(0.05)
+        state = env.reset()
+        rospy.sleep(4.0)
+        np_state = (np.array(state, dtype=np.float32),)
+        np_state = np.reshape(np_state, [1, observation_space])
+        
+        while j < MAX_STEPS and not done:
+            q_values = model.predict(np_state)
+            action = np.argmax(q_values[0])
+            disc_action = discrete_action(action, step_size)
+            new_state, reward, done, info = env.step(disc_action)
+            print("*********************************************")
+            print("Observation: ", new_state)
+            print("Action: ", action_to_string(action))
+            print("Reward: ", reward)
+            print("Done: ", done)
+            print("Episode: ", i)
+            print("Step: ", j)
+            print("*********************************************")
+            np_new_state = (np.array(new_state, dtype=np.float32),)
+            np_new_state = np.reshape(np_new_state, [1, observation_space])
+
+            loss = experience_evaluating(model, np_state, action, reward, np_new_state, done, GAMMA)
+            list_loss.append(loss)
+            np_state = np_new_state
+            state = new_state
+            j+=1
+        i+=1
+    return sum(list_loss)/len(list_loss)
+
 def compute_exploration_decay(EXPLORATION_MAX, EXPLORATION_MIN, EPISODE_MAX, MAX_STEPS):
     '''
     Compute the exploration decay in function of Episode max
@@ -651,7 +695,7 @@ def main():
     neurons = 64
     LEARNING_RATE = 0.001
 
-    training = True
+    training = False
     if training:
         _, folder_path = utils.init_folders(task=task)
         utils.create_summary(folder_path, task, EPISODE_MAX, MAX_STEPS, GAMMA,MEMORY_SIZE, BATCH_SIZE, EXPLORATION_MAX, EXPLORATION_MIN, EXPLORATION_DECAY, observation_space, action_space, hidden_layers, neurons, LEARNING_RATE, step_size)
@@ -669,19 +713,20 @@ def main():
         number_episode = 1195
         step_btw2_load = 500
         list_mean_loss = []
-        folder_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/"
-        folder_name = "20190802_184358_learn_to_go_position/"
+        folder_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/position_learning/"
+        folder_name = "model_for_kuka_position_learning/"
         folder_path = folder_path + folder_name
-        for i in xrange(0, number_episode, step_btw2_load):
-            model_path = folder_path +"model/"
-            model_name = "model_"
-            total_model_path = model_path + model_name + str(i) + ".h5"
-            model = utils.load_trained_model(total_model_path)
-            list_mean_loss.append((i, use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA)))
-        utils.save(list_mean_loss, number_episode,
-            arg_path = folder_path + "mean_loss/", 
-            arg_name = "mean_loss")
-        print(list_mean_loss)
+        
+        model_path = folder_path +"model/"
+        model_name = "model_"
+        total_model_path = model_path + model_name + str(3500) + ".h5"
+        model = utils.load_trained_model(total_model_path)
+        use_model_v2(env, model, MAX_STEPS, observation_space, step_size, GAMMA)
+
+        # utils.save(list_mean_loss, number_episode,
+        #     arg_path = folder_path + "mean_loss/", 
+        #     arg_name = "mean_loss")
+        # print(list_mean_loss)
     print("End")
 
 if __name__ == '__main__':
