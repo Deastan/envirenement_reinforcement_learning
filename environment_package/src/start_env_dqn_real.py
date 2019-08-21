@@ -560,12 +560,13 @@ def dqn_learning_keras_memoryReplay_v2(env, model, folder_path, EPISODE_MAX, MAX
                 arg_name = "memory_"))
 
 
-def use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
+def use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA, folder_path):
     '''
     Use a trained model 
     '''
     # Parameters;
     env.set_mode(mode="evaluating")
+    # print("Max_step: ", MAX_STEPS)
     # list_target_points = []
     # list_target_points.append([0.5, -0.3, 0.3])
     # list_target_points.append([0.6, -0.0, 0.3])
@@ -576,19 +577,30 @@ def use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
     # # list_target_points.append([0.5, -0.2, 0.1])
     # np_target_points = np.array(list_target_points)
     # epidodes_max = len(list_target_points)
-    epidodes_max = 100
+    epidodes_max = 500
     done = False
     list_loss = [] # to save for compute the mean of this model
     list_total_reward = []
+    list_list_loss = []
+    list_done = []
+    list_memory_history = []
     for i in range(epidodes_max):
         j = 0
         # env.set_for_evaluation(np_target_points[i])
-        rospy.sleep(0.05)
+        # rospy.sleep(0.05)
         state = env.reset()
-        rospy.sleep(5.0)
+        # rospy.sleep(5.0)
+        rospy.sleep(4.0)
         np_state = (np.array(state, dtype=np.float32),)
         np_state = np.reshape(np_state, [1, observation_space])
         total_reward = 0
+        list_loss = []
+        list_memory = []
+        done = False
+        # print("*********************************************")
+        # print("Episode: ", i)
+        # print("*********************************************")
+
         while j < MAX_STEPS and not done:
             q_values = model.predict(np_state)
             action = np.argmax(q_values[0])
@@ -605,15 +617,41 @@ def use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
             np_new_state = (np.array(new_state, dtype=np.float32),)
             np_new_state = np.reshape(np_new_state, [1, observation_space])
 
+
             loss = experience_evaluating(model, np_state, action, reward, np_new_state, done, GAMMA)
             list_loss.append(loss)
             total_reward += reward
+            list_memory.append([np_state, action, reward, np_new_state, done])
             np_state = np_new_state
             state = new_state
             j+=1
         list_total_reward.append(total_reward)
+        if len(list_loss) != 0:
+            list_list_loss.append(sum(list_loss)/len(list_loss))
+        list_done.append(done)
+        list_memory_history.append(list_memory)
         i+=1
-    return sum(list_loss)/len(list_loss)
+        if i%100 == 0:
+            # Save the model
+            print("Saving...")
+            # Save datas
+            print("Saving list_total_reward: ", utils.save(list_total_reward, i, 
+                arg_path = folder_path + "evaluations/", 
+                arg_name="list_total_reward_"))
+            print("Saving list_memory_history: ", utils.save(list_memory_history, 
+                i, arg_path = folder_path + "evaluations/", 
+                arg_name = "list_memory_history_"))
+            print("Saving list_done: ", utils.save(list_done, 
+                i, arg_path = folder_path + "evaluations/", 
+                arg_name = "list_done_"))
+            print("Saving list_loss: ", utils.save(list_list_loss, 
+                i, arg_path = folder_path + "evaluations/", 
+                arg_name = "list_loss_"))
+            # Save the memory!
+            # print("Saving memory: ", utils.save(memory, 
+            #     i, arg_path = folder_path + "memory/", 
+            #     arg_name = "memory_"))
+    # return sum(list_loss)/len(list_loss)
 
 def use_model_v2(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
     '''
@@ -623,7 +661,7 @@ def use_model_v2(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
     env.set_mode(mode="predicting")
     
     
-    epidodes_max = 1
+    epidodes_max = 5
     done = False
     list_loss = [] # to save for compute the mean of this model
     for i in range(epidodes_max):
@@ -634,13 +672,13 @@ def use_model_v2(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
         rospy.sleep(2.0)
         np_state = (np.array(state, dtype=np.float32),)
         np_state = np.reshape(np_state, [1, observation_space])
-        
+        done = False
         while j < MAX_STEPS and not done:
             # state = env.new_observation
             # np_state = (np.array(state, dtype=np.float32),)
             # np_state = np.reshape(np_state, [1, observation_space])
             q_values = model.predict(np_state)
-            print("state for chossing: ", np_state)
+            # print("state for chossing: ", np_state)
             action = np.argmax(q_values[0])
             disc_action = discrete_action(action, step_size)
             # rospy.sleep(6.0)
@@ -706,7 +744,7 @@ def main():
     LEARNING_RATE = 0.001
 
     training = False
-    bool_evaluate = False
+    bool_evaluate = True
     if training:
         print("training")
         _, folder_path = utils.init_folders(task=task)
@@ -730,7 +768,7 @@ def main():
         model_name = "model_"
         total_model_path = model_path + model_name + str(3500) + ".h5"
         model = utils.load_trained_model(total_model_path)
-        use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA)
+        use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA, folder_path)
     else:
         print("Predicting")
         env = init_env()

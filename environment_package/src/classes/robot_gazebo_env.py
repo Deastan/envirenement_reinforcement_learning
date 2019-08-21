@@ -151,7 +151,7 @@ class RobotGazeboEnv(gym.Env):
         # create env..
 
         # REAL ROBOT
-        self.bool_real_robot = True
+        self.bool_real_robot = False
         self.pub_real_robot = rospy.Publisher('/iiwa/command/CartesianPose', PoseStamped, queue_size=1)
         self.listener = rospy.Subscriber("/iiwa/state/CartesianPose", PoseStamped, self.callback_real_robot, queue_size=5)
         # self.rospy.s
@@ -211,7 +211,8 @@ class RobotGazeboEnv(gym.Env):
         done = self._is_done(observation)
         reward = self._compute_reward(observation, done)
         info = "No information yet"
-        rospy.sleep(3.0)
+        if self.bool_real_robot:
+            rospy.sleep(3.0)
         return observation, reward, done, info
 
     def reset(self):
@@ -227,7 +228,7 @@ class RobotGazeboEnv(gym.Env):
             result = self.random_target_position()
             self.random_ee_position()
         elif self.env_mode == "evaluating":
-            print("[ Info]: env mode: evaluating")
+            # print("[ Info]: env mode: evaluating")
             result = self.random_target_position()
             self.random_ee_position()
 
@@ -253,7 +254,7 @@ class RobotGazeboEnv(gym.Env):
         #     print("Continuer: ", self.continuous)
         # self.continuous = False
         # self._init_env_variables()
-        # rospy.sleep(3.0)
+        rospy.sleep(3.0)
         return self._get_obs()
 
     def close(self):
@@ -456,6 +457,12 @@ class RobotGazeboEnv(gym.Env):
             observation.append(self.current_robot_pose[1])
             observation.append(current_robot_pose_interm[2])
             q_interm = quaternion_from_euler(3.1457, 0.0, 0.0)
+
+            # DIRTY!
+            # robot : quaternion
+            # 0.9999978912139245, 0.0, -0.0, -0.00205367176151744,
+            # simulation: quaternion
+            # -0.9999978144262414, -0.00021456720756557568, 0.000276704450621678, 0.0020611982681980317
             observation.append(-0.9999978144262414)#(q_interm[0]) # ACHTUUUUUNGGGGG
             observation.append(q_interm[1])
             observation.append(q_interm[2])
@@ -556,7 +563,7 @@ class RobotGazeboEnv(gym.Env):
     def check_workspace(self, pose):
         '''
         Check the workspace if we can reach the position or not...
-        Assumptions: Never go under z=0.2 (offset_z)
+        Assumptions: Never go under z = 0.2 (offset_z)
 
         Output: 
                 True if we can reach the position, False otherwise.
@@ -614,6 +621,7 @@ class RobotGazeboEnv(gym.Env):
             # constant_z = 0.10
 
             # Current pose of the hand effector
+            # print("HERRE")
             current_pose = geometry_msgs.msg.Pose()
             current_pose = self.get_endEffector_pose().pose
             # print("***************************************************")
@@ -687,14 +695,15 @@ class RobotGazeboEnv(gym.Env):
 
 
         if self.check_workspace(pose_goal) == True:
+            result = self.execute_endEffector_pose(pose_goal)
             # self.pub_cartesianPose.publish(pose_goal)
-            if not self.bool_real_robot:
-                result = self.execute_endEffector_pose(pose_goal)
-            elif self.bool_real_robot:
-                # print("Should go here: ", goal)
-                # rospy.sleep(2.0)
-                # result = self.execute_endEffector_pose(pose_goal)
-                self.pub_real_robot.publish(goal)
+            # if not self.bool_real_robot:
+            #     result = self.execute_endEffector_pose(pose_goal)
+            # elif self.bool_real_robot:
+            #     # print("Should go here: ", goal)
+            #     # rospy.sleep(2.0)
+            #     # result = self.execute_endEffector_pose(pose_goal)
+            #     self.pub_real_robot.publish(goal)
             # Shortcut the result from moveit 
 
             # current_pose = self.get_endEffector_pose().pose
@@ -1047,10 +1056,10 @@ class RobotGazeboEnv(gym.Env):
         result = False
         object_pose = Pose()
         while result==False:
-            # object_pose.position.x = random.uniform(0.4, 0.6)
-            object_pose.position.x = random.uniform(0.4, 0.5)
-            # object_pose.position.y = random.uniform(-0.45, 0.45)
-            object_pose.position.y = random.uniform(-0.2, 0.2)
+            object_pose.position.x = random.uniform(0.4, 0.6)
+            # object_pose.position.x = random.uniform(0.4, 0.5)
+            object_pose.position.y = random.uniform(-0.45, 0.45)
+            # object_pose.position.y = random.uniform(-0.2, 0.2)
             object_pose.position.z = self.constant_z
             result = True
             # result = self.check_workspace(object_pose)
@@ -1070,7 +1079,7 @@ class RobotGazeboEnv(gym.Env):
         object_pose = Pose()
         while result==False:
             object_pose.position.x = random.uniform(0.5, 0.6)
-            object_pose.position.y = random.uniform(-0.25, 0.25)
+            object_pose.position.y = random.uniform(-0.35, 0.35)
             object_pose.position.z = self.constant_z
             result = self.check_workspace(object_pose)
         self.ee_position[0] = object_pose.position.x
