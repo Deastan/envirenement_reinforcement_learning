@@ -566,27 +566,29 @@ def use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
     '''
     # Parameters;
     env.set_mode(mode="evaluating")
-    list_target_points = []
-    list_target_points.append([0.5, -0.3, 0.1])
-    list_target_points.append([0.6, -0.0, 0.1])
-    list_target_points.append([0.4, 0.3, 0.1])
-    # list_target_points.append([0.4, -0.4, 0.1])
-    # list_target_points.append([0.6, 0.1, 0.1])
-    # list_target_points.append([0.6, -0.1, 0.1])
-    # list_target_points.append([0.5, -0.2, 0.1])
-    np_target_points = np.array(list_target_points)
-    epidodes_max = len(list_target_points)
+    # list_target_points = []
+    # list_target_points.append([0.5, -0.3, 0.3])
+    # list_target_points.append([0.6, -0.0, 0.3])
+    # list_target_points.append([0.4, 0.3, 0.3])
+    # # list_target_points.append([0.4, -0.4, 0.1])
+    # # list_target_points.append([0.6, 0.1, 0.1])
+    # # list_target_points.append([0.6, -0.1, 0.1])
+    # # list_target_points.append([0.5, -0.2, 0.1])
+    # np_target_points = np.array(list_target_points)
+    # epidodes_max = len(list_target_points)
+    epidodes_max = 100
     done = False
     list_loss = [] # to save for compute the mean of this model
+    list_total_reward = []
     for i in range(epidodes_max):
         j = 0
-        env.set_for_evaluation(np_target_points[i])
+        # env.set_for_evaluation(np_target_points[i])
         rospy.sleep(0.05)
         state = env.reset()
         rospy.sleep(5.0)
         np_state = (np.array(state, dtype=np.float32),)
         np_state = np.reshape(np_state, [1, observation_space])
-        
+        total_reward = 0
         while j < MAX_STEPS and not done:
             q_values = model.predict(np_state)
             action = np.argmax(q_values[0])
@@ -605,9 +607,11 @@ def use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
 
             loss = experience_evaluating(model, np_state, action, reward, np_new_state, done, GAMMA)
             list_loss.append(loss)
+            total_reward += reward
             np_state = np_new_state
             state = new_state
             j+=1
+        list_total_reward.append(total_reward)
         i+=1
     return sum(list_loss)/len(list_loss)
 
@@ -616,10 +620,10 @@ def use_model_v2(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
     Use a trained model 
     '''
     # Parameters;
-    env.set_mode(mode="evaluating")
+    env.set_mode(mode="predicting")
     
     
-    epidodes_max = 2
+    epidodes_max = 1
     done = False
     list_loss = [] # to save for compute the mean of this model
     for i in range(epidodes_max):
@@ -627,14 +631,19 @@ def use_model_v2(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
         # env.set_for_evaluation(np_target_points[i])
         # rospy.sleep(0.05)
         state = env.reset()
-        rospy.sleep(4.0)
+        rospy.sleep(2.0)
         np_state = (np.array(state, dtype=np.float32),)
         np_state = np.reshape(np_state, [1, observation_space])
         
         while j < MAX_STEPS and not done:
+            # state = env.new_observation
+            # np_state = (np.array(state, dtype=np.float32),)
+            # np_state = np.reshape(np_state, [1, observation_space])
             q_values = model.predict(np_state)
+            print("state for chossing: ", np_state)
             action = np.argmax(q_values[0])
             disc_action = discrete_action(action, step_size)
+            # rospy.sleep(6.0)
             new_state, reward, done, info = env.step(disc_action)
             print("*********************************************")
             print("Observation: ", new_state)
@@ -653,7 +662,7 @@ def use_model_v2(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
             state = new_state
             j+=1
         i+=1
-    return sum(list_loss)/len(list_loss)
+    #return sum(list_loss)/len(list_loss)
 
 
 def compute_exploration_decay(EXPLORATION_MAX, EXPLORATION_MIN, EPISODE_MAX, MAX_STEPS):
@@ -697,7 +706,9 @@ def main():
     LEARNING_RATE = 0.001
 
     training = False
+    bool_evaluate = False
     if training:
+        print("training")
         _, folder_path = utils.init_folders(task=task)
         utils.create_summary(folder_path, task, EPISODE_MAX, MAX_STEPS, GAMMA,MEMORY_SIZE, BATCH_SIZE, EXPLORATION_MAX, EXPLORATION_MIN, EXPLORATION_DECAY, observation_space, action_space, hidden_layers, neurons, LEARNING_RATE, step_size)
 
@@ -708,15 +719,21 @@ def main():
         # GAMMA = 0.95
         # model = training_from_demo(model, memory, GAMMA)
         dqn_learning_keras_memoryReplay_v2(env, model, folder_path, EPISODE_MAX, MAX_STEPS, GAMMA,MEMORY_SIZE, BATCH_SIZE, EXPLORATION_MAX, EXPLORATION_MIN, EXPLORATION_DECAY, observation_space, action_space, step_size)
-    else:
-        # Predict model
-        # env = init_env()
-        # number_episode = 1195
-        # step_btw2_load = 500
-        # list_mean_loss = []
+    elif bool_evaluate:
+        print("evaluating")
         env = init_env()
-        # env.reset()
-        # env.reset()
+        folder_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/position_learning/"
+        folder_name = "model_for_kuka_position_learning/"
+        folder_path = folder_path + folder_name
+        
+        model_path = folder_path +"model/"
+        model_name = "model_"
+        total_model_path = model_path + model_name + str(3500) + ".h5"
+        model = utils.load_trained_model(total_model_path)
+        use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA)
+    else:
+        print("Predicting")
+        env = init_env()
         folder_path = "/media/roboticlab14/DocumentsToShare/Reinforcement_learning/Datas/position_learning/"
         folder_name = "model_for_kuka_position_learning/"
         folder_path = folder_path + folder_name

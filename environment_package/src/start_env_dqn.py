@@ -651,7 +651,7 @@ def main():
     neurons = 64
     LEARNING_RATE = 0.001
 
-    training = True
+    training = False
     if training:
         _, folder_path = utils.init_folders(task=task)
         utils.create_summary(folder_path, task, EPISODE_MAX, MAX_STEPS, GAMMA,MEMORY_SIZE, BATCH_SIZE, EXPLORATION_MAX, EXPLORATION_MIN, EXPLORATION_DECAY, observation_space, action_space, hidden_layers, neurons, LEARNING_RATE, step_size)

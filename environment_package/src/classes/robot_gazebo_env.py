@@ -31,6 +31,8 @@ import moveit_msgs.msg
 from moveit_msgs.msg import MoveItErrorCodes
 from moveit_msgs.msg import TrajectoryConstraints, Constraints, JointConstraint, RobotState, WorkspaceParameters, MotionPlanRequest
 from std_srvs.srv import Empty
+# from iiwa_msgs.msg import CartesianPose
+from geometry_msgs.msg import PoseStamped
 
 # Spawner
 import roslib
@@ -49,6 +51,7 @@ from controller_manager_msgs.srv import LoadController
 
 # Maths
 import numpy
+import tf
 from tf.transformations import *
 import tf.transformations as tft
 from math import pi
@@ -58,6 +61,7 @@ class RobotGazeboEnv(gym.Env):
 
     def __init__(self):
         # print("create object!")
+        # rospy.init_node('BIM', anonymous=False, log_level=rospy.WARN)
         self.status = "environment created"
         
         #Gazebo:
@@ -74,7 +78,9 @@ class RobotGazeboEnv(gym.Env):
         # Creation of moveit variables
         # self.moveit_object = MoveIiwa()
         self.pub_cartesianPose = rospy.Publisher('/iiwa/moveToCartesianPose', Pose, queue_size=1)
-        
+
+
+
         moveit_commander.roscpp_initialize(sys.argv)
         self.robot = moveit_commander.RobotCommander()
         self.scene = moveit_commander.PlanningSceneInterface()
@@ -107,10 +113,10 @@ class RobotGazeboEnv(gym.Env):
         # Observations:
         # Last position
         self.last_pose = [] #this is a pose so x, y, z R, P, Y
-        self.last_observation = [] #this is an obersvations: x, y, z R, P, Y, (maybe gripper: open/close), etc...
+        self.last_observation = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] #this is an obersvations: x, y, z R, P, Y, (maybe gripper: open/close), etc...
         # Current position
         self.current_pose = []
-        self.current_observation = []
+        self.current_observation = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
         # TARGET
         target_x = 0.5#0.0#0.5
@@ -122,7 +128,7 @@ class RobotGazeboEnv(gym.Env):
         self.target_position.append(target_z)
 
         # eePositon:
-        ee_x = 0.6#0.0#0.5
+        ee_x = 0.5#0.0#0.5
         ee_y = +0.2#0.5
         ee_z = self.constant_z#0.5
         self.ee_position = []
@@ -143,6 +149,32 @@ class RobotGazeboEnv(gym.Env):
         self.out_workspace = False
 
         # create env..
+
+        # REAL ROBOT
+        self.bool_real_robot = True
+        self.pub_real_robot = rospy.Publisher('/iiwa/command/CartesianPose', PoseStamped, queue_size=1)
+        self.listener = rospy.Subscriber("/iiwa/state/CartesianPose", PoseStamped, self.callback_real_robot, queue_size=5)
+        # self.rospy.s
+        # rospy.spin()
+        
+        # Real robot position init
+        self.current_robot_pose = []
+        # Position
+        self.current_robot_pose.append(self.ee_position[0])
+        self.current_robot_pose.append(self.ee_position[1])
+        self.current_robot_pose.append(self.ee_position[2])
+        # Orientation
+        self.current_robot_pose.append(0.0)
+        self.current_robot_pose.append(0.0)
+        self.current_robot_pose.append(0.0)
+        self.current_robot_pose.append(1.0)
+
+        self.current_observation = self.current_robot_pose
+        self.current_observation.append(self.target_position[0])
+        self.current_observation.append(self.target_position[1])
+        self.current_observation.append(self.target_position[2])
+        self.new_observation = self.current_observation
+
 
     # Env methods
     def seed(self, seed=None):
@@ -179,6 +211,7 @@ class RobotGazeboEnv(gym.Env):
         done = self._is_done(observation)
         reward = self._compute_reward(observation, done)
         info = "No information yet"
+        rospy.sleep(3.0)
         return observation, reward, done, info
 
     def reset(self):
@@ -195,6 +228,8 @@ class RobotGazeboEnv(gym.Env):
             self.random_ee_position()
         elif self.env_mode == "evaluating":
             print("[ Info]: env mode: evaluating")
+            result = self.random_target_position()
+            self.random_ee_position()
 
         self.load_stop_controller()
         self.start_controller()
@@ -218,7 +253,7 @@ class RobotGazeboEnv(gym.Env):
         #     print("Continuer: ", self.continuous)
         # self.continuous = False
         # self._init_env_variables()
-        rospy.sleep(3.0)
+        # rospy.sleep(3.0)
         return self._get_obs()
 
     def close(self):
@@ -281,8 +316,20 @@ class RobotGazeboEnv(gym.Env):
     def _init_env_variables(self):
         # print("Var = 0")
         # self.step_circle = 0
-        self.last_pose = self.get_endEffector_pose().pose
-        self.current_pose = self.last_pose
+        if not self.bool_real_robot:
+            self.last_pose = self.get_endEffector_pose().pose
+            self.current_pose = self.last_pose
+        elif self.bool_real_robot:
+            self.last_pose = Pose()
+            self.last_pose.position.x = self.current_robot_pose[0]
+            self.last_pose.position.y = self.current_robot_pose[1]
+            self.last_pose.position.z = self.current_robot_pose[2]
+            self.last_pose.orientation.x = self.current_robot_pose[3]
+            self.last_pose.orientation.y = self.current_robot_pose[4]
+            self.last_pose.orientation.z = self.current_robot_pose[5]
+            self.last_pose.orientation.w = self.current_robot_pose[6]
+
+            self.current_pose = self.last_pose
         
         return True
 
@@ -338,43 +385,95 @@ class RobotGazeboEnv(gym.Env):
         Position of the target 
         
         """
-        # rospy.logdebug("Start Get Observation ==>")
-        self.last_pose = self.current_pose
-        # print(self.current_pose.pose)
-
-        last_observation = []     
-        last_observation.append(self.current_pose.position.x)
-        last_observation.append(self.current_pose.position.y)
-        last_observation.append(self.current_pose.position.z)
-        last_observation.append(self.current_pose.orientation.x)
-        last_observation.append(self.current_pose.orientation.y)
-        last_observation.append(self.current_pose.orientation.z)
-        last_observation.append(self.current_pose.orientation.w)
-        # Add the target position to the observation:
-        last_observation.append(self.target_position[0])
-        last_observation.append(self.target_position[1])
-        last_observation.append(self.target_position[2])
-
-        self.last_observation = last_observation
         
-        self.current_pose = self.get_endEffector_pose().pose
-        observation = []
-        
-        observation.append(self.current_pose.position.x)
-        observation.append(self.current_pose.position.y)
-        observation.append(self.current_pose.position.z)
-        observation.append(self.current_pose.orientation.x)
-        observation.append(self.current_pose.orientation.y)
-        observation.append(self.current_pose.orientation.z)
-        observation.append(self.current_pose.orientation.w)
+        if not self.bool_real_robot:
+            # rospy.logdebug("Start Get Observation ==>")
+            self.last_pose = self.current_pose
+            # print(self.current_pose.pose)
 
-        # Add the target position to the observation:
-        observation.append(self.target_position[0])
-        observation.append(self.target_position[1])
-        observation.append(self.target_position[2])
+            last_observation = []     
+            last_observation.append(self.current_pose.position.x)
+            last_observation.append(self.current_pose.position.y)
+            last_observation.append(self.current_pose.position.z)
+            last_observation.append(self.current_pose.orientation.x)
+            last_observation.append(self.current_pose.orientation.y)
+            last_observation.append(self.current_pose.orientation.z)
+            last_observation.append(self.current_pose.orientation.w)
+            # Add the target position to the observation:
+            last_observation.append(self.target_position[0])
+            last_observation.append(self.target_position[1])
+            last_observation.append(self.target_position[2])
 
-        # Update observation 
-        self.current_observation = observation
+            self.last_observation = last_observation
+            
+            self.current_pose = self.get_endEffector_pose().pose
+            observation = []
+            
+            observation.append(self.current_pose.position.x)
+            observation.append(self.current_pose.position.y)
+            observation.append(self.current_pose.position.z)
+            observation.append(self.current_pose.orientation.x)
+            observation.append(self.current_pose.orientation.y)
+            observation.append(self.current_pose.orientation.z)
+            observation.append(self.current_pose.orientation.w)
+
+            # Add the target position to the observation:
+            observation.append(self.target_position[0])
+            observation.append(self.target_position[1])
+            observation.append(self.target_position[2])
+
+            # Update observation 
+            self.current_observation = observation
+        elif self.bool_real_robot:
+            # print("Current position")
+            self.last_pose = self.current_pose
+            
+            # last_observation = []     
+            # last_observation.append(self.current_pose.position.x)
+            # last_observation.append(self.current_pose.position.y)
+            # last_observation.append(self.current_pose.position.z)
+            # last_observation.append(self.current_pose.orientation.x)
+            # last_observation.append(self.current_pose.orientation.y)
+            # last_observation.append(self.current_pose.orientation.z)
+            # last_observation.append(self.current_pose.orientation.w)
+            # # Add the target position to the observation:
+            # last_observation.append(self.target_position[0])
+            # last_observation.append(self.target_position[1])
+            # last_observation.append(self.target_position[2])
+
+            # self.last_observation = last_observation
+            self.last_observation = self.current_observation
+            
+            # self.current_pose = self.get_endEffector_pose().pose
+            rospy.sleep(1.0)
+            # self.listener
+            current_robot_pose_interm = self.current_robot_pose
+            observation = []
+            
+            # observation.append(current_robot_pose_interm[0])
+            # observation.append(current_robot_pose_interm[1])
+            observation.append(self.current_robot_pose[0])
+            observation.append(self.current_robot_pose[1])
+            observation.append(current_robot_pose_interm[2])
+            q_interm = quaternion_from_euler(3.1457, 0.0, 0.0)
+            observation.append(-0.9999978144262414)#(q_interm[0]) # ACHTUUUUUNGGGGG
+            observation.append(q_interm[1])
+            observation.append(q_interm[2])
+            observation.append(q_interm[3])
+            # observation.append(current_robot_pose_interm[3])
+            # observation.append(current_robot_pose_interm[4])
+            # observation.append(current_robot_pose_interm[5])
+            # observation.append(current_robot_pose_interm[6])
+
+            
+            print("x_obs= ", observation[0], ", y_obs= ", observation[1])
+            # Add the target position to the observation:
+            observation.append(self.target_position[0])
+            observation.append(self.target_position[1])
+            observation.append(self.target_position[2])
+
+            # Update observation 
+            self.current_observation = observation
         
         return observation
 
@@ -490,7 +589,7 @@ class RobotGazeboEnv(gym.Env):
             self.out_workspace = False
             result = True
         else:
-            # print("Check_workspace: Cannot go at this pose")
+            print("Check_workspace: Cannot go at this pose")
             # self.reset()
             self.out_workspace = True
         # print("[ INFO] Time for the check_workspace: ", time.time()-time_start_check_workspace)
@@ -509,53 +608,93 @@ class RobotGazeboEnv(gym.Env):
         Vector action is the delta position (m) and angle (rad)
         (x, y, z, R, P, Y)    
         '''
-        # time_start_set_endEffector_actionToPose = time.time()
-        # defining a height that the robot should stay!
-        # constant_z = 0.10
+        if not self.bool_real_robot:
+            # time_start_set_endEffector_actionToPose = time.time()
+            # defining a height that the robot should stay!
+            # constant_z = 0.10
 
-        # Current pose of the hand effector
-        current_pose = geometry_msgs.msg.Pose()
-        current_pose = self.get_endEffector_pose().pose
-        # print("***************************************************")
-        # print("current orientation")
-        # print(current_pose.orientation)
+            # Current pose of the hand effector
+            current_pose = geometry_msgs.msg.Pose()
+            current_pose = self.get_endEffector_pose().pose
+            # print("***************************************************")
+            # print("current orientation")
+            # print(current_pose.orientation)
 
-        # Normal way
-        # q_interm = quaternion_from_euler(action[3], action[4], action[5])
-        # q_interm[0] = current_pose.orientation.x
-        # q_interm[1] = current_pose.orientation.y
-        # q_interm[2] = current_pose.orientation.z
-        # q_interm[3] = current_pose.orientation.w
-        # Fix way
-        q_interm = quaternion_from_euler(3.1457, 0.0, 0.0)
+            # Normal way
+            # q_interm = quaternion_from_euler(action[3], action[4], action[5])
+            # q_interm[0] = current_pose.orientation.x
+            # q_interm[1] = current_pose.orientation.y
+            # q_interm[2] = current_pose.orientation.z
+            # q_interm[3] = current_pose.orientation.w
+            # Fix way
+            q_interm = quaternion_from_euler(3.1457, 0.0, 0.0)
 
-        # print("***************************************************")
-        # euler to quaternion 
-        # R, P, Y = action[3], action[4], action[5]
-        # q_rot = quaternion_from_euler(action[3], action[4], action[5])
-        # print("***************************************************")
-        # print("desired rotation")
-        # print(q_rot)
-        # print("***************************************************")
-  
+            # print("***************************************************")
+            # euler to quaternion 
+            # R, P, Y = action[3], action[4], action[5]
+            # q_rot = quaternion_from_euler(action[3], action[4], action[5])
+            # print("***************************************************")
+            # print("desired rotation")
+            # print(q_rot)
+            # print("***************************************************")
+    
 
-        # create pose msg
-        pose_goal = geometry_msgs.msg.Pose()
-        pose_goal.position.x = current_pose.position.x + action[0]
-        pose_goal.position.y = current_pose.position.y + action[1]
-        pose_goal.position.z = self.constant_z #current_pose.position.z + action[2]
-        # q_interm = quaternion_multiply(q_rot, q_interm)
-        pose_goal.orientation.x = q_interm[0]
-        pose_goal.orientation.y = q_interm[1]
-        pose_goal.orientation.z = q_interm[2]
-        pose_goal.orientation.w = q_interm[3]
-        # pose_goal.orientation =  q_mult(q_rot, current_pose.orientation)
+            # create pose msg
+            pose_goal = geometry_msgs.msg.Pose()
+            # pose_goal.position.x = current_pose.position.x + action[0]
+            # pose_goal.position.y = current_pose.position.y + action[1]
+            
+            pose_goal.position.x = current_pose.position.x + action[0]
+            pose_goal.position.y = current_pose.position.y + action[1]
+            
+            pose_goal.position.z = self.constant_z #current_pose.position.z + action[2]
+            # q_interm = quaternion_multiply(q_rot, q_interm)
+            pose_goal.orientation.x = q_interm[0]
+            pose_goal.orientation.y = q_interm[1]
+            pose_goal.orientation.z = q_interm[2]
+            pose_goal.orientation.w = q_interm[3]
+            # pose_goal.orientation =  q_mult(q_rot, current_pose.orientation)
 
-        # Check if point is in the workspace:
-        # bool_check_workspace = self.check_workspace(pose_goal)
+            # Check if point is in the workspace:
+            # bool_check_workspace = self.check_workspace(pose_goal)
+        elif self.bool_real_robot:
+            goal = PoseStamped()
+
+            goal.header.seq = 1
+            goal.header.stamp = rospy.Time.now()
+            goal.header.frame_id = "world"
+            print("x= ", self.current_robot_pose[0], ", y= ", self.current_robot_pose[1])
+            goal.pose.position.x = self.current_robot_pose[0] + action[0]
+            # print("action: ", action[0])
+            goal.pose.position.y = self.current_robot_pose[1] + action[1]
+
+            goal.pose.position.z = self.constant_z
+
+            quaternion = tf.transformations.quaternion_from_euler(3.14, 0.0, -3.14)#1.5707963
+            # quaternion = quaternion_from_euler(3.1457, 0.0, 0.0)
+            goal.pose.orientation.x = quaternion[0]
+            goal.pose.orientation.y = quaternion[1]
+            goal.pose.orientation.z = quaternion[2]
+            goal.pose.orientation.w = quaternion[3]
+
+            pose_goal = goal.pose
+            # rospy.sleep(1.0)
+            self.pub_real_robot.publish(goal)
+            return True
+
+            # self.pub_real_robot.publish(goal)
+            # pub.publish(goal)
+
+
         if self.check_workspace(pose_goal) == True:
             # self.pub_cartesianPose.publish(pose_goal)
-            result = self.execute_endEffector_pose(pose_goal)
+            if not self.bool_real_robot:
+                result = self.execute_endEffector_pose(pose_goal)
+            elif self.bool_real_robot:
+                # print("Should go here: ", goal)
+                # rospy.sleep(2.0)
+                # result = self.execute_endEffector_pose(pose_goal)
+                self.pub_real_robot.publish(goal)
             # Shortcut the result from moveit 
 
             # current_pose = self.get_endEffector_pose().pose
@@ -586,12 +725,41 @@ class RobotGazeboEnv(gym.Env):
         pose_goal.orientation.y = q_interm[1]
         pose_goal.orientation.z = q_interm[2]
         pose_goal.orientation.w = q_interm[3]
-    
+
+        if self.bool_real_robot:
+            goal = PoseStamped()
+
+            goal.header.seq = 1
+            goal.header.stamp = rospy.Time.now()
+            goal.header.frame_id = "world"
+
+            # goal.pose.position.x = pose_goal.position.x
+            # goal.pose.position.y = pose_goal.position.y
+            goal.pose.position.x = action[0]
+            goal.pose.position.y = action[1]
+
+            goal.pose.position.z = pose_goal.position.z
+
+            quaternion = tf.transformations.quaternion_from_euler(3.14, 0.0, -3.14)#1.5707963
+
+            goal.pose.orientation.x = quaternion[0]
+            goal.pose.orientation.y = quaternion[1]
+            goal.pose.orientation.z = quaternion[2]
+            goal.pose.orientation.w = quaternion[3]
+
+            pose_goal = goal.pose
+            self.pub_real_robot.publish(goal)
+            return True
+
         # Check if point is in the workspace:
         # bool_check_workspace = self.check_workspace(pose_goal)
         if self.check_workspace(pose_goal) == True:
             # self.pub_cartesianPose.publish(pose_goal)
-            result = self.execute_endEffector_pose(pose_goal)
+            if not self.bool_real_robot:
+                result = self.execute_endEffector_pose(pose_goal)
+            elif self.bool_real_robot:
+                # result = self.execute_endEffector_pose(pose_goal)
+                self.pub_real_robot.publish(goal)
             # Shortcut the result from moveit 
             result = True
         else:
@@ -879,10 +1047,13 @@ class RobotGazeboEnv(gym.Env):
         result = False
         object_pose = Pose()
         while result==False:
-            object_pose.position.x = random.uniform(0.4, 0.7)
-            object_pose.position.y = random.uniform(-0.45, 0.45)
+            # object_pose.position.x = random.uniform(0.4, 0.6)
+            object_pose.position.x = random.uniform(0.4, 0.5)
+            # object_pose.position.y = random.uniform(-0.45, 0.45)
+            object_pose.position.y = random.uniform(-0.2, 0.2)
             object_pose.position.z = self.constant_z
-            result = self.check_workspace(object_pose)
+            result = True
+            # result = self.check_workspace(object_pose)
         self.target_position[0] = object_pose.position.x
         self.target_position[1] = object_pose.position.y
         self.target_position[2] = object_pose.position.z
@@ -898,8 +1069,8 @@ class RobotGazeboEnv(gym.Env):
         result = False
         object_pose = Pose()
         while result==False:
-            object_pose.position.x = random.uniform(0.4, 0.7)
-            object_pose.position.y = random.uniform(-0.45, 0.45)
+            object_pose.position.x = random.uniform(0.5, 0.6)
+            object_pose.position.y = random.uniform(-0.25, 0.25)
             object_pose.position.z = self.constant_z
             result = self.check_workspace(object_pose)
         self.ee_position[0] = object_pose.position.x
@@ -936,3 +1107,36 @@ class RobotGazeboEnv(gym.Env):
             self.env_mode = "training"
 
         return self.env_mode
+
+
+    def callback_real_robot(self, msg):
+        '''
+        Save the new position of the object
+        '''
+        # Issue when it is filling the matrix and an other function try to get the values.
+        # A possible failure is when the vector is filled and the values will be not get for the right time!
+        # self.current_object_position = []
+        # self.current_object_position.append(msg.position.x)
+        # self.current_object_position.append(msg.position.y)
+        # self.current_object_position.append(msg.position.z)
+        try:
+            # self.current_object_position[0] = msg.position.x
+            # self.current_object_position[1] = msg.position.y
+            # self.current_object_position[2] = msg.position.z
+            # print(msg.pose.position.x)
+            self.current_robot_pose[0] = msg.pose.position.x
+            # print(msg.pose.position.y)
+            self.current_robot_pose[1] = msg.pose.position.y
+            self.current_robot_pose[2] = msg.pose.position.z
+            self.current_robot_pose[3] = msg.pose.orientation.x
+            self.current_robot_pose[4] = msg.pose.orientation.y
+            self.current_robot_pose[5] = msg.pose.orientation.z
+            self.current_robot_pose[6] = msg.pose.orientation.w
+
+            self.new_observation = self.current_robot_pose
+            self.new_observation.append(self.target_position[0])
+            self.new_observation.append(self.target_position[1])
+            self.new_observation.append(self.target_position[2])
+            # print("( ", msg.pose.position.x, ", ", msg.pose.position.y, " )")
+        except:
+            print("[ ERROR]: Don't have the position of the object!")
