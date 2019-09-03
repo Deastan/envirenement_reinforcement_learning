@@ -1,14 +1,14 @@
 #!/usr/bin/env python2
 
-import rospy
+from math import pi
+import numpy as np
+import os
+
+# Reinforcement learning
 import gym
 from gym.utils import seeding
-# from .gazebo_connection import GazeboConnection
-# from .controllers_connection import ControllersConnection
-import rospy
-import numpy as np
 from gym import spaces
-import os
+
 # For the ROS 
 import roslaunch
 import rospy
@@ -17,12 +17,13 @@ import git
 import sys
 import time
 import random
+import tf.transformations as tft
 
-#moveit
+# Moveit
 import moveit_commander
-# from moveit_commander.conversions import pose_to_list
+from tf.transformations import *
 
-# msg
+# Msg
 import geometry_msgs.msg
 from std_msgs.msg import String
 from std_msgs.msg import Float64
@@ -30,28 +31,20 @@ from sensor_msgs.msg import JointState
 import moveit_msgs.msg
 from moveit_msgs.msg import MoveItErrorCodes
 from moveit_msgs.msg import TrajectoryConstraints, Constraints, JointConstraint, RobotState, WorkspaceParameters, MotionPlanRequest
+from controller_manager_msgs.srv import SwitchController
+from controller_manager_msgs.srv import LoadController
 from std_srvs.srv import Empty
-
+from std_msgs.msg import Empty as EmptyMsg
+from geometry_msgs.msg import *
 # Spawner
 import roslib
 # from gazebo.srv import *
-from geometry_msgs.msg import *
-import tf.transformations as tft
+
+# Ros Services
 from gazebo_msgs.srv import SpawnModel
 from gazebo_msgs.srv import SpawnModelRequest
 from gazebo_msgs.srv import DeleteModel
 from gazebo_msgs.srv import DeleteModelRequest
-from std_msgs.msg import Empty as EmptyMsg
-
-from controller_manager_msgs.srv import SwitchController
-# from controller_manager_msgs.srv import SwitchControllerRequest
-from controller_manager_msgs.srv import LoadController
-
-# Maths
-import numpy
-from tf.transformations import *
-import tf.transformations as tft
-from math import pi
 
 # https://github.com/openai/gym/blob/master/gym/core.py
 class RobotGazeboEnv(gym.Env):
@@ -69,7 +62,7 @@ class RobotGazeboEnv(gym.Env):
 
         # Init position:
         self.bool_init_joint_or_pose = False
-        self.constant_z = 0.3
+        self.constant_z = 0.3 # BECAREFUL Z IS FIXED!
 
         # Creation of moveit variables
         # self.moveit_object = MoveIiwa()
@@ -78,17 +71,12 @@ class RobotGazeboEnv(gym.Env):
         moveit_commander.roscpp_initialize(sys.argv)
         self.robot = moveit_commander.RobotCommander()
         self.scene = moveit_commander.PlanningSceneInterface()
-        
-
         # Form the motion planning request
         # req = MotionPlanRequest()
         
         self.group_name = "manipulator"
         self.group = moveit_commander.MoveGroupCommander(self.group_name)
         self.group.set_planner_id("RRTkConfigDefault")
-        # self.group.set_planner_id("RRTConnectkConfigDefault") # Seem to be collissions aviodance
-        # self.group.set_workspace([-1.3, -1.3, 0.05, 1.3, 1.3, 1.3])
-        # self.step_circle = 0
 
         # For GYM
         # Action space
@@ -106,13 +94,14 @@ class RobotGazeboEnv(gym.Env):
 
         # Observations:
         # Last position
-        self.last_pose = [] #this is a pose so x, y, z R, P, Y
-        self.last_observation = [] #this is an obersvations: x, y, z R, P, Y, (maybe gripper: open/close), etc...
+        self.last_pose = [] # this is a pose so x, y, z R, P, Y
+        self.last_observation = [] # this is an obersvations: x, y, z R, P, Y, (maybe gripper: open/close), etc...
         # Current position
         self.current_pose = []
         self.current_observation = []
 
-        # TARGET
+        # TARGET: Position of the target
+        # TODO: Separate target_x... in a yaml file
         target_x = 0.5#0.0#0.5
         target_y = -0.5#0.5
         target_z = self.constant_z#0.5
@@ -121,7 +110,8 @@ class RobotGazeboEnv(gym.Env):
         self.target_position.append(target_y)
         self.target_position.append(target_z)
 
-        # OBJECTS:
+        # OBJECTS: Position of the end effector at the begining
+        # TODO: Separate ee_x... in a yaml file
         ee_x = 0.5#0.0#0.5
         ee_y = -0.5#0.5
         ee_z = self.constant_z#0.5
@@ -129,8 +119,6 @@ class RobotGazeboEnv(gym.Env):
         self.ee_position.append(ee_x)
         self.ee_position.append(ee_y)
         self.ee_position.append(ee_z)
-
-        
 
         # MODE
         # Default is training
@@ -144,7 +132,7 @@ class RobotGazeboEnv(gym.Env):
 
         # create env..
 
-    # Env methods
+    # Env methods inherit from Gym
     def seed(self, seed=None):
         """Sets the seed for this env's random number generator(s).
         Note:
@@ -182,7 +170,8 @@ class RobotGazeboEnv(gym.Env):
         return observation, reward, done, info
 
     def reset(self):
-        """Resets the state of the environment and returns an initial observation.
+        """
+        Resets the state of the environment and returns an initial observation.
         Returns: 
             observation (object): the initial observation.
         """
@@ -380,7 +369,8 @@ class RobotGazeboEnv(gym.Env):
 
     def _compute_reward(self, observations, done):
         """
-        
+        Compute and return the reward for a step (single action)
+        The reward is defined here by the user!
         """
         
         # The sign depend on its function.
@@ -426,7 +416,6 @@ class RobotGazeboEnv(gym.Env):
                 else:
                     total_reward -= alpha*distance_after_move
 
-        # print("REWARD: ", distance_after_move )
         # Time punishment
         total_reward -= 2.0
 
@@ -435,6 +424,10 @@ class RobotGazeboEnv(gym.Env):
     # Check if the goal is reached or not
     def _is_done(self, observations):
         """
+        Check if the goal is reached or not.
+
+        return  True if the end effector reaches the target
+                False otherwise
         
         """
 
@@ -444,7 +437,7 @@ class RobotGazeboEnv(gym.Env):
         vector_observ_pose.append(observations[1])
         vector_observ_pose.append(observations[2])
 
-        # Check if the hand effector is close to the target in m!
+        # Check if the hand effector is close to the target in meter [m]!
         if self.distance_between_vectors(vector_observ_pose, self.target_position) < 0.11:
             done = True
 
@@ -462,11 +455,7 @@ class RobotGazeboEnv(gym.Env):
         Output: 
                 True if we can reach the position, False otherwise.
         '''
-        # Time
-        # time_start_action = time.time()
-        # print("[ INFO] Time for the action ", j, ": ", time.time()-time_start_action)
-        # print("Check workplace")
-        # time_start_check_workspace = time.time()
+        
         result = False
         x = pose.position.x
         y = pose.position.y
@@ -482,26 +471,22 @@ class RobotGazeboEnv(gym.Env):
         offset_ee = 0.13
         # offset_z = 0.25
         offset_z = 0.05 # for testing the hands
-        # print("Before check point")
-        # print("Calculation: ", ((x*x + y*y + (z-z0)*(z-z0)) < (0.8+offset_ee)*(0.8+offset_ee)))
+        
         if (((x*x + y*y + (z-z0)*(z-z0)) < (0.8+offset_ee)*(0.8+offset_ee)) 
                 and ((x*x + y*y + (z-z0)*(z-z0)) > 0.4*0.4) 
                 and z > offset_z):
             self.out_workspace = False
             result = True
         else:
-            # print("Check_workspace: Cannot go at this pose")
-            # self.reset()
+        
             self.out_workspace = True
-        # print("[ INFO] Time for the check_workspace: ", time.time()-time_start_check_workspace)
+            
         return result
 
     def get_endEffector_pose(self):
-        # start_time = time.time()
+        
         endEffector_pose = self.group.get_current_pose()
-        # stop_time = time.time()
-        # print("--- %s seconds ---" % (stop_time - start_time))
-        # print("[ INFO] Time for the get_endEffector_pose: ", time.time()-start_time)
+        
         return endEffector_pose
 
     def set_endEffector_actionToPose(self, action):
@@ -516,11 +501,8 @@ class RobotGazeboEnv(gym.Env):
         # Current pose of the hand effector
         current_pose = geometry_msgs.msg.Pose()
         current_pose = self.get_endEffector_pose().pose
-        # print("***************************************************")
-        # print("current orientation")
-        # print(current_pose.orientation)
 
-        # Normal way
+        # Normal way if you don't fix the end effector to one orientation!
         # q_interm = quaternion_from_euler(action[3], action[4], action[5])
         # q_interm[0] = current_pose.orientation.x
         # q_interm[1] = current_pose.orientation.y
@@ -529,14 +511,12 @@ class RobotGazeboEnv(gym.Env):
         # Fix way
         q_interm = quaternion_from_euler(3.1457, 0.0, 0.0)
 
-        # print("***************************************************")
-        # euler to quaternion 
+        # euler to quaternion  to apply the rotation to the end effector
         # R, P, Y = action[3], action[4], action[5]
         # q_rot = quaternion_from_euler(action[3], action[4], action[5])
-        # print("***************************************************")
         # print("desired rotation")
         # print(q_rot)
-        # print("***************************************************")
+        # q_interm = quaternion_multiply(q_rot, q_interm)
   
 
         # create pose msg
@@ -544,7 +524,7 @@ class RobotGazeboEnv(gym.Env):
         pose_goal.position.x = current_pose.position.x + action[0]
         pose_goal.position.y = current_pose.position.y + action[1]
         pose_goal.position.z = self.constant_z #current_pose.position.z + action[2]
-        # q_interm = quaternion_multiply(q_rot, q_interm)
+        
         pose_goal.orientation.x = q_interm[0]
         pose_goal.orientation.y = q_interm[1]
         pose_goal.orientation.z = q_interm[2]
@@ -556,16 +536,10 @@ class RobotGazeboEnv(gym.Env):
         if self.check_workspace(pose_goal) == True:
             # self.pub_cartesianPose.publish(pose_goal)
             result = self.execute_endEffector_pose(pose_goal)
-            # Shortcut the result from moveit 
-
-            # current_pose = self.get_endEffector_pose().pose
-            # print("Error is: ", self.distance_between_vectors([current_pose.position.x, 
-            #   current_pose.position.y, current_pose.position.z], [pose_goal.position.x, 
-            #   pose_goal.position.y, pose_goal.position.z]))
             result = True
         else:
             result = False
-        # print("[ INFO] Time for the set_endEffector_actionToPose: ", time.time()-time_start_set_endEffector_actionToPose)
+            
         return result
         
     def set_endEffector_pose(self, action):
@@ -581,6 +555,7 @@ class RobotGazeboEnv(gym.Env):
         pose_goal.position.x = action[0]
         pose_goal.position.y = action[1]
         pose_goal.position.z = action[2]#current_pose.position.z + action[2]
+
         # q_interm = quaternion_multiply(q_rot, q_interm)
         pose_goal.orientation.x = q_interm[0]
         pose_goal.orientation.y = q_interm[1]
@@ -596,7 +571,7 @@ class RobotGazeboEnv(gym.Env):
             result = True
         else:
             result = False
-        # print("[ INFO] Time for the time_start_set_endEffector_pose: ", time.time()-time_start_set_endEffector_pose)
+            
         return result
 
 
@@ -605,26 +580,17 @@ class RobotGazeboEnv(gym.Env):
         '''
         Send to the "controller" the positions (trajectory) where it want to go
         '''
-        # time_start_execute_endEffector_pose = time.time()
+        
         result = False
-        # self.group.shift_pose_target(5, action)
         self.group.set_pose_target(pose)
-        # time_start_execute_endEffector_pose_plan = time.time()
         result = self.group.go(wait=True)
-        # time_start_execute_endEffector_pose_go = time.time()
+        
 
         self.group.stop()
-        # time_start_execute_endEffector_pose_stop = time.time()
+        
         # It is always good to clear your targets after planning with poses.
         # Note: there is no equivalent function for clear_joint_value_targets()
         self.group.clear_pose_targets()
-        # time_start_execute_endEffector_pose_clear = time.time()
-
-        # print("[ INFO] Time for plan: ", time_start_execute_endEffector_pose_plan-time_start_execute_endEffector_pose)
-        # print("[ INFO] Time for go: ", time_start_execute_endEffector_pose_go-time_start_execute_endEffector_pose_plan)
-        # print("[ INFO] Time for: Stop: ", time_start_execute_endEffector_pose_stop-time_start_execute_endEffector_pose_go)
-        # print("[ INFO] Time for: Clear: ", time_start_execute_endEffector_pose_clear-time_start_execute_endEffector_pose_stop)
-        # print("[ INFO] Time for the time_start_execute_endEffector_pose: ", time.time()-time_start_execute_endEffector_pose)
         return result
 
     def set_joints_execute(self, joints_angle):
@@ -632,23 +598,21 @@ class RobotGazeboEnv(gym.Env):
         Execute the trajectory to go to the desired joints angle
         
         '''
-        # time_start_set_joints_execute = time.time()
-        # self.group.set_joint_value_target(joint_goal)
+
         self.group.set_joint_value_target(joints_angle)
         # The go command can be called with joint values, poses, or without any
         # parameters if you have already set the pose or joint target for the group
-        # result = self.group.go(joint_goal, wait=True) #BEFORE
+        
         self.plan = self.group.plan()
         result = self.group.go(wait=True)
         # result = self.group.go(joints_angle, wait=True)
-        # rospy.sleep(2.0)
-        # rospy.sleep(5.0)
-        # Calling ``stop()`` ensures that there is no residual movement
+        
         self.group.stop()
         # self.group.clear_pose_targets()
         # self.group.forget_joint_values()
-        # print("[ INFO] Time for the time_start_set_joints_execute: ", time.time()-time_start_set_joints_execute)
+        
         return result
+
 
     # Calculates the distance btw two position vectors
     def distance_between_vectors(self, v1, v2):

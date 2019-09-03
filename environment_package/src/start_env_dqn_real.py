@@ -661,7 +661,7 @@ def use_model_v2(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
     env.set_mode(mode="predicting")
     
     
-    epidodes_max = 5
+    epidodes_max = 10
     done = False
     list_loss = [] # to save for compute the mean of this model
     for i in range(epidodes_max):
@@ -744,7 +744,7 @@ def main():
     LEARNING_RATE = 0.001
 
     training = False
-    bool_evaluate = True
+    bool_evaluate = False
     if training:
         print("training")
         _, folder_path = utils.init_folders(task=task)
