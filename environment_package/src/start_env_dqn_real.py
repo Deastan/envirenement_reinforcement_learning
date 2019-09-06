@@ -1,57 +1,45 @@
 #!/usr/bin/env python2
 
+# Own module
 import utils
-import datetime
-# if sys.version_info[0] < 3:
-#         raise Exception("Must be using Python 3 on ROS")
 
-# import tensorflow as tf
-import gym
+# if sys.version_info[0] > 2:
+#         raise Exception("Must be using Python 2 on ROS")
+
 import numpy as np
 import time
-# import qlearn
+import os
+import math
+import git
+import sys
 import random
-from gym import wrappers
-from gym.envs.registration import register
+import matplotlib.pyplot as plt
+import subprocess
+import termios, tty # for keyboard
+import datetime
+
 # ROS packages required
 import rospy
 import rospkg
+import roslaunch
+from tf.transformations import *
 
 #REINFORCEMENT LEARNING:
-import matplotlib.pyplot as plt
-import tensorflow as tf
+import gym
+from gym import wrappers
+from gym.envs.registration import register
+from classes.robot_gazebo_env import RobotGazeboEnv
 
-import math
+# Neural Network
+import tensorflow as tf
 from collections import deque
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
 from keras.callbacks import TensorBoard
 
-# import our training environment
-# from openai_ros.task_envs.iiwa_tasks import iiwa_move
-# from openai_ros.task_envs.hopper import hopper_stay_up
-# import pickle, os
-
-# from baselines import PPO2
-# from run_algo import start_learning
-import subprocess
-
-# For the launch 
-import roslaunch
-import os
-
-import git
-import sys
 # save part
 import pickle
-import termios, tty # for keyboard
-# import environment_package.env_class.robot_gazebo_env
-# from openai_ros.task_envs.fetch import fetch_test_task
-# from home.roboticlab14.catkin_ws.src.envirenement_reinforcement_learning.environment_package.env_class.robot_gazebo_env import RobotGazeboEnv
-# from environment_package import robot_gazebo_env
-from classes.robot_gazebo_env import RobotGazeboEnv
-from tf.transformations import *
 # Global variables:
 here = os.path.dirname(os.path.abspath(__file__))
 
@@ -141,7 +129,10 @@ def save_forReplay(memory, state, action, reward, new_state, done):
 def experience_replay(model, memory, 
       BATCH_SIZE, exploration_rate, EXPLORATION_DECAY, EXPLORATION_MIN, GAMMA):
     '''
-    Train the NN
+        Train the NN
+
+    Send each step to the model fit without a batch... slower for the GPU because lose a lot of time to send to GPU from CPU etc... 
+    Better to send a batch to the GPU
     '''
     if len(memory) < BATCH_SIZE:
         return model, exploration_rate
@@ -165,7 +156,7 @@ def experience_replay(model, memory,
 def experience_replay_v2(model, memory, 
       BATCH_SIZE, exploration_rate, EXPLORATION_DECAY, EXPLORATION_MIN, GAMMA):
     '''
-    Train the NN
+    Train the NN by sending a batch to the model fit and not only one by one step! Faster.
     '''
     if len(memory) < BATCH_SIZE:
         return model, exploration_rate, 0
@@ -185,13 +176,7 @@ def experience_replay_v2(model, memory,
         np_list_q_values[i] = q_values[0]
         i+=1
     history = model.fit(np_list_states, np_list_q_values, epochs=2,  batch_size=BATCH_SIZE, verbose=0)#, callbacks=[tbCallBack])
-    # print("Loss is: ", history.history)
-    # print(history.history['loss'])
 
-    #FIXE THE EXPLORATION RATE!!!!
-    # exploration_rate *= EXPLORATION_DECAY
-    # print("Exploration rate: ", exploration_rate)
-    # exploration_rate = max(EXPLORATION_MIN, exploration_rate)
     exploration_rate = 0.1
     return model, exploration_rate, history.history['loss']
 
@@ -222,93 +207,12 @@ def training_from_demo(model, memory_from_demo, GAMMA):
         model.fit(state, q_values, verbose=0)
     return model
 
-def create_demo(env):
-    # constant_z = 0.1
-    action = [1, 3, 3, 3, 3, 3, 3]
-    demo_epoch = 20
-    demo_step = len(action)
-    observation_space = 7
-    deck_size = 2*demo_step*demo_epoch
-    # q_interm = quaternion_from_euler(3.14, 0.0, 0.0)
-    memory_from_demo = deque(maxlen=deck_size)
-
-    #PARAMS
-    GAMMA = 0.95
-    LEARNING_RATE = 0.001
-    BATCH_SIZE = 20
-    EXPLORATION_MAX = 1.0
-    EXPLORATION_MIN = 0.01
-    EXPLORATION_DECAY = 0.995
-    # state = [0.6, 0.1, constant_z, q_interm[0], q_interm[1], q_interm[2], q_interm[3]]
-    # np_state = (np.array(state, dtype=np.float32),)
-    # np_state = np.reshape(np_state, [1, observation_space])
-    # '''
-    # 0 = + step_size * x droite
-    # 1 = - step_size * x gauche
-    # 2 = + step_size * y haut
-    # 3 = + step_size * y bas
-    # in summury: links, down down down down
-    # '''
-    # action = 1
-    # done = env._is_done(state)
-    # reward = env._compute_reward(state, done)
-    
-    for i in range(0, demo_epoch):
-        j = 0
-        state = env.reset()
-        np_state = (np.array(state, dtype=np.float32),)
-        np_state = np.reshape(np_state, [1, observation_space])
-        for j in range(0, demo_step):
-
-            disc_action = discrete_action(action[j],step_size = 0.05)
-            new_state, reward, done, info = env.step(disc_action)
-            print("*********************************************")
-            print("Observation: ", new_state)
-            print("Reward: ", reward)
-            print("Done: ", done)
-            print("Episode: ", i)
-            print("Step: ", j)
-            print("*********************************************")
-            np_new_state = (np.array(new_state, dtype=np.float32),)
-            np_new_state = np.reshape(np_new_state, [1, observation_space])
-            memory_from_demo.append((np_state, action, reward, np_new_state, done))
-            np_state = np_new_state
-            state = new_state
-            j+=1
-        i+=1
-    action = [3, 3, 3, 3, 3, 3, 1]
-    i = 0
-
-    for i in range(0, demo_epoch):
-        j = 0
-        state = env.reset()
-        np_state = (np.array(state, dtype=np.float32),)
-        np_state = np.reshape(np_state, [1, observation_space])
-        for j in range(0, demo_step):
-            
-            disc_action = discrete_action(action[j], step_size = 0.05)
-            new_state, reward, done, info = env.step(disc_action)
-            print("*********************************************")
-            print("Observation: ", new_state)
-            print("Reward: ", reward)
-            print("Done: ", done)
-            print("Episode: ", i)
-            print("Step: ", j)
-            print("*********************************************")
-            np_new_state = (np.array(new_state, dtype=np.float32),)
-            np_new_state = np.reshape(np_new_state, [1, observation_space])
-            memory_from_demo.append((np_state, action, reward, np_new_state, done))
-            np_state = np_new_state
-            state = new_state
-            j+=1
-        i+=1
-    
-    return memory_from_demo
 
 # Neural network with 2 hidden layer using Keras + experience replay
 def dqn_learning_keras_memoryReplay(env, model, folder_path, EPISODE_MAX, MAX_STEPS, GAMMA,MEMORY_SIZE, BATCH_SIZE, EXPLORATION_MAX, EXPLORATION_MIN, EXPLORATION_DECAY, observation_space, action_space, step_size):
     '''
     function which is a neural net using Keras with memory replay
+    the fit model is inside the second for loop => the model is trained at each step.
     '''
 
     # Initializations:
@@ -340,43 +244,23 @@ def dqn_learning_keras_memoryReplay(env, model, folder_path, EPISODE_MAX, MAX_ST
         list_memory = []
         
         while j < MAX_STEPS and not done: # step inside an episode
-            time_start_step = time.time()
             
-            # print("[INFO]: episode: ", i, ", step: ", j)
-
             # BECAREFUL with the action!
             action = choose_action(model, np_state, action_space, exploration_rate)
             disc_action = discrete_action(action, step_size)
-            # print(action)
-            time_start_action = time.time()
-            print("################INSIDE ENV################")
+           
             new_state, reward, done, _ = env.step(disc_action)
-            print("################INSIDE ENV################")
-            print("[ INFO] Time for the action ", j, ": ", time.time()-time_start_action)
-            time_start_print = time.time()
-            print("*********************************************")
-            print("Observation: ", new_state)
-            # print("State: ", state)
-            print("Reward: ", reward)
-            print("Total rewards: ", total_reward)
-            print("Done: ", done)
-            print("Episode: ", i)
-            print("Step: ", j)
-            print("*********************************************")
-            print("[ INFO] Time for the print info ", j, ": ", time.time()-time_start_print)
+
             np_new_state = (np.array(new_state, dtype=np.float32),)
             np_new_state = np.reshape(np_new_state, [1, observation_space])
-            # np_new_state = np.identity(7)[np_new_state:np_new_state+1]
 
             # Memory replay
             # memory = save_forReplay(memory, state, action, reward, new_state, done)
             time_start_save_for_replay = time.time()
             save_forReplay(memory, np_state, action, reward, np_new_state, done)
-            print("[ INFO] Time for the saving of experience replay ", j, ": ", time.time()-time_start_save_for_replay)
-            time_start_experience_replay = time.time()
+
             model, exploration_rate_new, loss = experience_replay_v2(model, memory, 
                 BATCH_SIZE, exploration_rate, EXPLORATION_DECAY, EXPLORATION_MIN, GAMMA)
-            print("[ INFO] Time for the experience replay ", j, ": ", time.time()-time_start_experience_replay)
             
             list_memory.append([np_state, action, reward, np_new_state, done])
             # Save the lost function into a list
@@ -388,18 +272,12 @@ def dqn_learning_keras_memoryReplay(env, model, folder_path, EPISODE_MAX, MAX_ST
             total_reward += reward
             exploration_rate = exploration_rate_new
             
-            print("[ INFO] Time for the step ", j, ": ", time.time()-time_start_step)
+
             j+=1
         list_done.append(done)
         # Save the trajectory and reward
         list_memory_history.append(list_memory)
         list_total_reward.append(total_reward)
-        # print(list)
-        print("*********************************************")
-        print("*********************************************")  
-        print("[ INFO] Time for the epoch ", i, ": ", time.time()-time_start_epoch)
-        print("*********************************************")
-        print("*********************************************")
 
         if i%5 == 0:
             # Save the model
@@ -434,6 +312,7 @@ def dqn_learning_keras_memoryReplay(env, model, folder_path, EPISODE_MAX, MAX_ST
 def dqn_learning_keras_memoryReplay_v2(env, model, folder_path, EPISODE_MAX, MAX_STEPS, GAMMA,MEMORY_SIZE, BATCH_SIZE, EXPLORATION_MAX, EXPLORATION_MIN, EXPLORATION_DECAY, observation_space, action_space, step_size):
     '''
     function which is a neural net using Keras with memory replay
+    the fit model is outside the second for loop => the model is trained at each episodes.
     '''
 
     # Initializations:
@@ -467,52 +346,26 @@ def dqn_learning_keras_memoryReplay_v2(env, model, folder_path, EPISODE_MAX, MAX
         print("Episode: ", i)
         print("*********************************************")
         while j < MAX_STEPS and not done: # step inside an episode
-            # time_start_step = time.time()
-            
-            # print("[INFO]: episode: ", i, ", step: ", j)
 
             # BECAREFUL with the action!
             action = choose_action(model, np_state, action_space, exploration_rate)
             disc_action = discrete_action(action, step_size)
-            # print(action)
-            # time_start_action = time.time()
-            # print("################INSIDE ENV################")
             new_state, reward, done, _ = env.step(disc_action)
-            # print("################INSIDE ENV################")
-            # print("[ INFO] Time for the action ", j, ": ", time.time()-time_start_action)
-            # time_start_print = time.time()
-            # print("*********************************************")
-            # print("Observation: ", new_state)
-            # print("State: ", state)
-            # print("Reward: ", reward)
-            # print("Total rewards: ", total_reward)
-            # print("Done: ", done)
-            # print("Episode: ", i)
-            # print("Step: ", j)
-            # print("*********************************************")
-            # print("[ INFO] Time for the print info ", j, ": ", time.time()-time_start_print)
+            
             np_new_state = (np.array(new_state, dtype=np.float32),)
             np_new_state = np.reshape(np_new_state, [1, observation_space])
-            # np_new_state = np.identity(7)[np_new_state:np_new_state+1]
 
             # Memory replay
             # memory = save_forReplay(memory, state, action, reward, new_state, done)
-            # time_start_save_for_replay = time.time()
             save_forReplay(memory, np_state, action, reward, np_new_state, done)
-            # print("[ INFO] Time for the saving of experience replay ", j, ": ", time.time()-time_start_save_for_replay)
-            # time_start_experience_replay = time.time()
-            
-            # print("[ INFO] Time for the experience replay ", j, ": ", time.time()-time_start_experience_replay)
             
             list_memory.append([np_state, action, reward, np_new_state, done])
             
-            # print("list_loss: ", list_loss)
             np_state = np_new_state
             state = new_state
             total_reward += reward
             
             
-            # print("[ INFO] Time for the step ", j, ": ", time.time()-time_start_step)
             j+=1
         model, exploration_rate_new, loss = experience_replay_v2(model, memory, 
                 BATCH_SIZE, exploration_rate, EXPLORATION_DECAY, EXPLORATION_MIN, GAMMA)
@@ -524,12 +377,6 @@ def dqn_learning_keras_memoryReplay_v2(env, model, folder_path, EPISODE_MAX, MAX
         # Save the trajectory and reward
         list_memory_history.append(list_memory)
         list_total_reward.append(total_reward)
-        # print(list)
-        # print("*********************************************")
-        # print("*********************************************")  
-        # print("[ INFO] Time for the epoch ", i, ": ", time.time()-time_start_epoch)
-        # print("*********************************************")
-        # print("*********************************************")
 
         if i%500 == 0:
             # Save the model
@@ -562,21 +409,10 @@ def dqn_learning_keras_memoryReplay_v2(env, model, folder_path, EPISODE_MAX, MAX
 
 def use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA, folder_path):
     '''
-    Use a trained model 
+    Use a trained model for evaluation
     '''
     # Parameters;
     env.set_mode(mode="evaluating")
-    # print("Max_step: ", MAX_STEPS)
-    # list_target_points = []
-    # list_target_points.append([0.5, -0.3, 0.3])
-    # list_target_points.append([0.6, -0.0, 0.3])
-    # list_target_points.append([0.4, 0.3, 0.3])
-    # # list_target_points.append([0.4, -0.4, 0.1])
-    # # list_target_points.append([0.6, 0.1, 0.1])
-    # # list_target_points.append([0.6, -0.1, 0.1])
-    # # list_target_points.append([0.5, -0.2, 0.1])
-    # np_target_points = np.array(list_target_points)
-    # epidodes_max = len(list_target_points)
     epidodes_max = 500
     done = False
     list_loss = [] # to save for compute the mean of this model
@@ -586,10 +422,7 @@ def use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA, folder
     list_memory_history = []
     for i in range(epidodes_max):
         j = 0
-        # env.set_for_evaluation(np_target_points[i])
-        # rospy.sleep(0.05)
         state = env.reset()
-        # rospy.sleep(5.0)
         rospy.sleep(4.0)
         np_state = (np.array(state, dtype=np.float32),)
         np_state = np.reshape(np_state, [1, observation_space])
@@ -597,26 +430,18 @@ def use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA, folder
         list_loss = []
         list_memory = []
         done = False
-        # print("*********************************************")
-        # print("Episode: ", i)
-        # print("*********************************************")
 
         while j < MAX_STEPS and not done:
+            # calcul q values
             q_values = model.predict(np_state)
+            # take the argmax to have the action from the neural Net
             action = np.argmax(q_values[0])
+            # transform to discrete..
             disc_action = discrete_action(action, step_size)
             new_state, reward, done, info = env.step(disc_action)
-            print("*********************************************")
-            print("Observation: ", new_state)
-            print("Action: ", action_to_string(action))
-            print("Reward: ", reward)
-            print("Done: ", done)
-            print("Episode: ", i)
-            print("Step: ", j)
-            print("*********************************************")
+
             np_new_state = (np.array(new_state, dtype=np.float32),)
             np_new_state = np.reshape(np_new_state, [1, observation_space])
-
 
             loss = experience_evaluating(model, np_state, action, reward, np_new_state, done, GAMMA)
             list_loss.append(loss)
@@ -631,6 +456,7 @@ def use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA, folder
         list_done.append(done)
         list_memory_history.append(list_memory)
         i+=1
+
         if i%100 == 0:
             # Save the model
             print("Saving...")
@@ -655,7 +481,7 @@ def use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA, folder
 
 def use_model_v2(env, model, MAX_STEPS, observation_space, step_size, GAMMA):
     '''
-    Use a trained model 
+    Use a trained model for a working phase
     '''
     # Parameters;
     env.set_mode(mode="predicting")
@@ -743,8 +569,9 @@ def main():
     neurons = 64
     LEARNING_RATE = 0.001
 
-    training = False
+    training = True
     bool_evaluate = False
+    
     if training:
         print("training")
         _, folder_path = utils.init_folders(task=task)
@@ -769,6 +596,7 @@ def main():
         total_model_path = model_path + model_name + str(3500) + ".h5"
         model = utils.load_trained_model(total_model_path)
         use_model(env, model, MAX_STEPS, observation_space, step_size, GAMMA, folder_path)
+    # Use the model as a working phase
     else:
         print("Predicting")
         env = init_env()
